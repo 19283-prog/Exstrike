@@ -26,10 +26,6 @@ const deathKillsEl = document.getElementById('deathKills');
 const deathCoinsEl = document.getElementById('deathCoins');
 const deathDamageEl = document.getElementById('deathDamage');
 const deathTimeEl = document.getElementById('deathTime');
-const deathClimbEl = document.getElementById('deathClimb');
-const deathWaveEl = document.getElementById('deathWave');
-const bankedCoinsTextEl = document.getElementById('bankedCoinsText');
-const progressionUpgradeListEl = document.getElementById('progressionUpgradeList');
 const homeScreenEl = document.getElementById('homeScreen');
 const pauseMenuEl = document.getElementById('pauseMenu');
 const homePlayBtnEl = document.getElementById('homePlayBtn');
@@ -61,24 +57,6 @@ const GAME_STATE = {
 };
 let gameState = GAME_STATE.HOME;
 let combatEnemiesInitialized = false;
-const PROGRESSION_STORAGE_KEY = 'exstrike_progression_v1';
-const progressionUpgrades = {
-  startingHealth: { name: '+Starting Health', desc: '+15 max HP per level.', baseCost: 60, max: 5 },
-  movement: { name: 'Faster Movement', desc: '+6% walk/sprint speed per level.', baseCost: 75, max: 4 },
-  startingGun: { name: 'Better Starting Gun', desc: 'Start with stronger weapons as it levels.', baseCost: 120, max: 3 },
-  fireRate: { name: 'Weapon Handling', desc: 'Permanent fire-rate boost.', baseCost: 90, max: 4 },
-  coinBonus: { name: 'Coin Magnetism', desc: '+15% coin rewards per level.', baseCost: 80, max: 4 }
-};
-const progressionState = {
-  bankedCoins: 0,
-  upgrades: {
-    startingHealth: 0,
-    movement: 0,
-    startingGun: 0,
-    fireRate: 0,
-    coinBonus: 0
-  }
-};
 const BACKGROUND_MUSIC_PLAYLIST = [
   { title: "Warrior's Echo", src: "./assets/audio/Warrior's Echo.mp3" },
   { title: 'Gladiator Spirit', src: './assets/audio/Gladiator Spirit.mp3' },
@@ -371,10 +349,6 @@ function startGameFromHome() {
   setSettingsVisible(false, false);
   setTimeout(() => {
     setGameState(GAME_STATE.PLAYING);
-    playerHealth = getPlayerMaxHp();
-    refreshHealthHud();
-    applyStartingLoadout();
-    startWaveRun();
     ensureBackgroundMusicPlayback();
     requestPointerLockSafe();
   }, 520);
@@ -403,7 +377,7 @@ function quitToHome() {
   const spawnGroundY = sampleGroundHeight(player.position.x, player.position.z, player.position.y);
   player.position.y = spawnGroundY + RESPAWN_STANDING_OFFSET;
   vel.set(0, 0, 0);
-  playerHealth = getPlayerMaxHp();
+  playerHealth = PLAYER_MAX_HP;
   refreshHealthHud();
   clearEnemyProjectiles();
   resetLifeStats();
@@ -1433,16 +1407,12 @@ const rightArmBaseRot = new THREE.Euler(-0.1, -0.24, 0.1);
 const MAX_AMMO = 10;
 const STACK_MAX = 64;
 let coins = 0;
-const PLAYER_MAX_HP = 100;
+const PLAYER_MAX_HP = 10;
 let playerHealth = PLAYER_MAX_HP;
 let lifeKills = 0;
 let lifeDamageDealt = 0;
 let lifeCoinsEarned = 0;
 let lifeTimeSurvived = 0;
-let lifeDistanceClimbed = 0;
-let lifeHighestWave = 1;
-let lastResultReason = 'Death';
-let runCoinsBanked = false;
 let reloadHintTimer = null;
 let hitMarkerTimer = null;
 const gunUpgrades = {
@@ -1454,26 +1424,10 @@ function getMagCapacity() {
   return MAX_AMMO + gunUpgrades.magLevel * 5;
 }
 
-function getPlayerMaxHp() {
-  return PLAYER_MAX_HP + progressionState.upgrades.startingHealth * 15;
-}
-
-function getMovementMultiplier() {
-  return 1 + progressionState.upgrades.movement * 0.06;
-}
-
-function getPermanentFireRateMultiplier() {
-  return Math.max(0.68, 1 - progressionState.upgrades.fireRate * 0.07);
-}
-
-function getCoinRewardMultiplier() {
-  return 1 + progressionState.upgrades.coinBonus * 0.15;
-}
-
 function getShotCooldown() {
   const base = 0.12;
   const mult = Math.max(0.45, 1 - gunUpgrades.fireRateLevel * 0.12);
-  return base * mult * getPermanentFireRateMultiplier();
+  return base * mult;
 }
 
 function refreshCoinHud() {
@@ -1483,11 +1437,10 @@ function refreshCoinHud() {
 }
 
 function refreshHealthHud() {
-  const maxHp = getPlayerMaxHp();
-  const hp = THREE.MathUtils.clamp(playerHealth, 0, maxHp);
-  const pct = (hp / maxHp) * 100;
+  const hp = THREE.MathUtils.clamp(playerHealth, 0, PLAYER_MAX_HP);
+  const pct = (hp / PLAYER_MAX_HP) * 100;
   if (playerHealthBarEl) playerHealthBarEl.style.width = `${pct}%`;
-  if (playerHealthTextEl) playerHealthTextEl.textContent = `HP: ${hp} / ${maxHp}`;
+  if (playerHealthTextEl) playerHealthTextEl.textContent = `HP: ${hp} / ${PLAYER_MAX_HP}`;
 }
 
 function showReloadHint(text) {
@@ -1507,83 +1460,11 @@ function showHitMarker() {
   hitMarkerTimer = setTimeout(() => hitMarkerEl.classList.remove('active'), 95);
 }
 
-function addScreenShake(strength = 4, duration = 0.12) {
-  screenShakeStrength = Math.max(screenShakeStrength, strength);
-  screenShakeTime = Math.max(screenShakeTime, duration);
-}
-
-function getProgressionUpgradeCost(key) {
-  const def = progressionUpgrades[key];
-  const level = progressionState.upgrades[key] || 0;
-  return Math.floor(def.baseCost * Math.pow(1.55, level));
-}
-
-function loadProgression() {
-  try {
-    const raw = localStorage.getItem(PROGRESSION_STORAGE_KEY);
-    if (!raw) return;
-    const saved = JSON.parse(raw);
-    progressionState.bankedCoins = Math.max(0, Number(saved.bankedCoins) || 0);
-    for (const key of Object.keys(progressionState.upgrades)) {
-      progressionState.upgrades[key] = THREE.MathUtils.clamp(Number(saved.upgrades?.[key]) || 0, 0, progressionUpgrades[key].max);
-    }
-  } catch (_) {}
-}
-
-function saveProgression() {
-  try {
-    localStorage.setItem(PROGRESSION_STORAGE_KEY, JSON.stringify(progressionState));
-  } catch (_) {}
-}
-
-function renderProgressionShop() {
-  if (bankedCoinsTextEl) bankedCoinsTextEl.textContent = `Banked Coins: ${progressionState.bankedCoins}`;
-  if (!progressionUpgradeListEl) return;
-  progressionUpgradeListEl.innerHTML = '';
-  for (const [key, def] of Object.entries(progressionUpgrades)) {
-    const level = progressionState.upgrades[key] || 0;
-    const maxed = level >= def.max;
-    const cost = maxed ? 0 : getProgressionUpgradeCost(key);
-    const btn = document.createElement('button');
-    btn.className = 'progressionUpgradeBtn';
-    btn.disabled = maxed || progressionState.bankedCoins < cost;
-    btn.innerHTML = `${def.name} Lv.${level}/${def.max}${maxed ? ' - MAX' : ` - ${cost} coins`}<small>${def.desc}</small>`;
-    btn.addEventListener('click', () => buyProgressionUpgrade(key));
-    progressionUpgradeListEl.appendChild(btn);
-  }
-}
-
-function buyProgressionUpgrade(key) {
-  const def = progressionUpgrades[key];
-  if (!def) return;
-  const level = progressionState.upgrades[key] || 0;
-  if (level >= def.max) return;
-  const cost = getProgressionUpgradeCost(key);
-  if (progressionState.bankedCoins < cost) return;
-  progressionState.bankedCoins -= cost;
-  progressionState.upgrades[key] = level + 1;
-  saveProgression();
-  renderProgressionShop();
-  refreshHealthHud();
-}
-
-function bankRunCoinsOnce() {
-  if (runCoinsBanked) return;
-    const earned = Math.ceil(lifeCoinsEarned * getCoinRewardMultiplier());
-  progressionState.bankedCoins += earned;
-  runCoinsBanked = true;
-  saveProgression();
-}
-
 function resetLifeStats() {
   lifeKills = 0;
   lifeDamageDealt = 0;
   lifeCoinsEarned = 0;
   lifeTimeSurvived = 0;
-  lifeDistanceClimbed = 0;
-  lifeHighestWave = 1;
-  runCoinsBanked = false;
-  lastResultReason = 'Death';
 }
 
 function formatSurvivalTime(seconds) {
@@ -1594,23 +1475,16 @@ function formatSurvivalTime(seconds) {
 }
 
 function updateDeathStatsScreen() {
-  bankRunCoinsOnce();
   if (deathKillsEl) deathKillsEl.textContent = String(lifeKills);
   if (deathCoinsEl) deathCoinsEl.textContent = String(lifeCoinsEarned);
   if (deathDamageEl) deathDamageEl.textContent = String(lifeDamageDealt);
   if (deathTimeEl) deathTimeEl.textContent = formatSurvivalTime(lifeTimeSurvived);
-  if (deathClimbEl) deathClimbEl.textContent = `${Math.floor(lifeDistanceClimbed)} units`;
-  if (deathWaveEl) deathWaveEl.textContent = String(lifeHighestWave);
-  const title = deathStatsScreenEl?.querySelector('h2');
-  if (title) title.textContent = lastResultReason === 'Wave Clear' ? 'WAVE CLEAR' : 'RUN RESULTS';
-  renderProgressionShop();
 }
 
 function damagePlayer(amount = 1) {
   if (amount <= 0) return;
   playerHealth = Math.max(0, playerHealth - amount);
   refreshHealthHud();
-  addScreenShake(5.5, 0.16);
   playGameSfx('hurt');
 }
 
@@ -1882,18 +1756,6 @@ function giveChestLoot(gunId) {
   addItem('ammo', cap, 0, gunId);
   coins += 10 + Math.floor(Math.random() * 9);
   refreshCoinHud();
-  refreshUIAll();
-}
-
-function applyStartingLoadout() {
-  const level = progressionState.upgrades.startingGun || 0;
-  const desiredGun = level >= 3 ? 'rifle' : level >= 2 ? 'smg' : level >= 1 ? 'pistol' : null;
-  if (!desiredGun) return;
-  const alreadyHasGun = inventory.some(s => s.id && itemTypes[s.id]?.isGun);
-  if (alreadyHasGun) return;
-  const cap = getMagCapacity();
-  addItem(desiredGun, 1, cap);
-  addItem('ammo', cap * (1 + level), 0, desiredGun);
   refreshUIAll();
 }
 
@@ -2917,13 +2779,6 @@ let shootCooldown = 0;
 let recoilVisual = 0;
 let recoilPitchOffset = 0;
 let recoilYawOffset = 0;
-let screenShakeTime = 0;
-let screenShakeStrength = 0;
-let waveNumber = 1;
-let waveTimer = 0;
-let waveDuration = 45;
-let waveRunning = false;
-let waveSpawnSerial = 0;
 
 const COMBAT_SPAWN_POINT = new THREE.Vector3(-8600, BASE_GROUND_Y, -8200);
 const WORLD_ZONE = {
@@ -2973,7 +2828,6 @@ function beginRespawnSequence() {
   if (!respawnFadeOverlayEl) return;
   if (isRespawningActive()) return;
 
-  waveRunning = false;
   rightMouseAutoFire = false;
   document.exitPointerLock?.();
   if (isShopOpen()) closeShop();
@@ -3003,12 +2857,10 @@ function completeRespawnAtStart() {
   const spawnGroundY = sampleGroundHeight(player.position.x, player.position.z, player.position.y);
   player.position.y = spawnGroundY + RESPAWN_STANDING_OFFSET;
   vel.set(0, 0, 0);
-  playerHealth = getPlayerMaxHp();
+  playerHealth = PLAYER_MAX_HP;
   refreshHealthHud();
   clearEnemyProjectiles();
   resetLifeStats();
-  startWaveRun();
-  applyStartingLoadout();
 }
 
 function returnToStartArea() {
@@ -3462,8 +3314,6 @@ const COMBAT_ENEMY_AREA_HALF = 1000; // 2000x2000 area around combat spawn
 const PLAYER_HITBOX_RADIUS = 18;
 const PLAYER_HITBOX_Y_OFFSET = 16;
 const ENEMY_PROJECTILE_RADIUS = 6;
-const WAVE_MIN_TIME = 30;
-const WAVE_MAX_TIME = 60;
 
 const enemyTypeDefs = {
   soldier: { maxHp: 3, patrolSpeed: 85, chaseSpeed: 145, hitRadius: 24, eyeY: 34 },
@@ -3523,7 +3373,6 @@ const _enemyProjOrigin = new THREE.Vector3();
 const _enemyBounds = new THREE.Box3();
 const _enemyHealthParentQuat = new THREE.Quaternion();
 const _combatEnemySpawnPlan = [];
-const _starterEnemySpawnPlan = [];
 
 function setEnemyDebugVisible(v) {
   enemyDebugVisible = !!v;
@@ -3579,24 +3428,6 @@ function ensureCombatEnemySpawnPlan() {
     x: COMBAT_SPAWN_POINT.x,
     z: COMBAT_SPAWN_POINT.z - 360
   });
-}
-
-function ensureStarterEnemySpawnPlan() {
-  if (_starterEnemySpawnPlan.length > 0) return;
-  const types = ['soldier', 'monster', 'robot', 'soldier', 'monster', 'robot', 'soldier', 'monster'];
-  const offsets = [
-    [-190, -260], [190, -250], [0, -330], [-310, -80],
-    [310, -80], [-240, 210], [240, 210], [0, 360]
-  ];
-  for (let i = 0; i < offsets.length; i++) {
-    const [ox, oz] = offsets[i];
-    _starterEnemySpawnPlan.push({
-      id: `starter_enemy_${i}`,
-      type: types[i % types.length],
-      x: START_SPAWN.x + ox,
-      z: START_SPAWN.z + oz
-    });
-  }
 }
 
 function createSoldierEnemyMesh() {
@@ -3775,10 +3606,10 @@ function spawnEnemy(type, x, z, id) {
     id,
     type,
     mesh,
-    hp: Math.ceil(def.maxHp * (1 + (waveNumber - 1) * 0.18)),
-    maxHp: Math.ceil(def.maxHp * (1 + (waveNumber - 1) * 0.18)),
-    patrolSpeed: def.patrolSpeed * (1 + (waveNumber - 1) * 0.045),
-    chaseSpeed: def.chaseSpeed * (1 + (waveNumber - 1) * 0.055),
+    hp: def.maxHp,
+    maxHp: def.maxHp,
+    patrolSpeed: def.patrolSpeed,
+    chaseSpeed: def.chaseSpeed,
     hitRadius: def.hitRadius,
     eyeY: def.eyeY,
     fireInterval: def.fireInterval ?? ENEMY_FIRE_INTERVAL,
@@ -3788,8 +3619,7 @@ function spawnEnemy(type, x, z, id) {
     spawn: new THREE.Vector2(x, z),
     patrolTarget: new THREE.Vector2(x, z),
     waitTimer: Math.random() * 1.2,
-    shotCooldown: Math.random() * (def.fireInterval ?? ENEMY_FIRE_INTERVAL),
-    touchCooldown: 0
+    shotCooldown: Math.random() * (def.fireInterval ?? ENEMY_FIRE_INTERVAL)
   };
   createEnemyHealthBar(enemy);
   assignEnemyPatrolTarget(enemy);
@@ -3815,93 +3645,6 @@ function spawnCombatEnemies() {
     }
   }
   console.info(`Spawned ${combatEnemies.length} combat enemies near teleport spawn.`);
-}
-
-function spawnStarterEnemies() {
-  ensureStarterEnemySpawnPlan();
-  let aliveStarterCount = 0;
-  for (const enemy of combatEnemies) {
-    if (enemy.id?.startsWith('starter_enemy_')) aliveStarterCount += 1;
-  }
-  if (aliveStarterCount > 0) return;
-
-  for (const spec of _starterEnemySpawnPlan) {
-    if (deadEnemyIds.has(spec.id)) continue;
-    spawnEnemy(spec.type, spec.x, spec.z, spec.id);
-    aliveStarterCount += 1;
-  }
-
-  if (aliveStarterCount === 0) {
-    for (const spec of _starterEnemySpawnPlan) deadEnemyIds.delete(spec.id);
-    saveDeadEnemyIds();
-    for (const spec of _starterEnemySpawnPlan) {
-      spawnEnemy(spec.type, spec.x, spec.z, spec.id);
-      aliveStarterCount += 1;
-    }
-  }
-  console.info(`Spawned ${aliveStarterCount} starter enemies near the beginning spawn.`);
-}
-
-function startWaveRun() {
-  waveNumber = 1;
-  waveTimer = 0;
-  waveDuration = 30 + Math.random() * 30;
-  waveRunning = true;
-  lifeHighestWave = 1;
-  spawnWaveEnemies(waveNumber);
-}
-
-function spawnWaveEnemies(wave) {
-  const types = ['soldier', 'monster', 'robot'];
-  const count = Math.min(10, 5 + Math.floor(wave * 1.25));
-  const radius = 330 + Math.min(300, wave * 28);
-  for (let i = 0; i < count; i++) {
-    const ang = (Math.PI * 2 * i) / count + Math.random() * 0.35;
-    const r = radius + Math.random() * 110;
-    const x = player.position.x + Math.cos(ang) * r;
-    const z = player.position.z + Math.sin(ang) * r;
-    spawnEnemy(types[(i + wave) % types.length], x, z, `wave_${wave}_${waveSpawnSerial++}`);
-  }
-  showReloadHint(`Wave ${wave}`);
-}
-
-function getAliveWaveEnemyCount() {
-  let count = 0;
-  for (const enemy of combatEnemies) {
-    if (enemy.id?.startsWith('wave_')) count += 1;
-  }
-  return count;
-}
-
-function stepWaveSystem(delta) {
-  if (!waveRunning || isRespawningActive()) return;
-  lifeHighestWave = Math.max(lifeHighestWave, waveNumber);
-  waveTimer += delta;
-
-  if (getAliveWaveEnemyCount() === 0 && waveTimer > 6) {
-    showRunResults('Wave Clear');
-    return;
-  }
-
-  if (waveTimer >= waveDuration) {
-    waveNumber += 1;
-    lifeHighestWave = Math.max(lifeHighestWave, waveNumber);
-    waveTimer = 0;
-    waveDuration = THREE.MathUtils.clamp(WAVE_MAX_TIME - waveNumber * 2.2, WAVE_MIN_TIME, WAVE_MAX_TIME);
-    spawnWaveEnemies(waveNumber);
-  }
-}
-
-function updateClimbStats() {
-  const climbed = Math.max(0, player.position.y - START_SPAWN.y);
-  lifeDistanceClimbed = Math.max(lifeDistanceClimbed, climbed);
-}
-
-function showRunResults(reason = 'Death') {
-  if (isRespawningActive()) return;
-  waveRunning = false;
-  lastResultReason = reason;
-  beginRespawnSequence();
 }
 
 function ensureCombatEnemiesSpawned() {
@@ -3999,7 +3742,6 @@ function damageEnemyAt(index, amount = 1) {
   enemy.hp -= amount;
   lifeDamageDealt += Math.min(amount, before);
   showHitMarker();
-  addScreenShake(enemy.type === 'boss' ? 5 : 2.8, 0.1);
   updateEnemyHealthBar(enemy);
   if (enemy.hp <= 0) {
     killEnemyAt(index);
@@ -4022,15 +3764,9 @@ function stepEnemies(delta) {
   if (combatEnemies.length === 0) return;
   for (const enemy of combatEnemies) {
     enemy.mesh.position.y = getGroundHeightAt(enemy.mesh.position.x, enemy.mesh.position.z, enemy.mesh.position.y) + enemy.groundOffset;
-    enemy.touchCooldown = Math.max(0, (enemy.touchCooldown ?? 0) - delta);
     const dx = player.position.x - enemy.mesh.position.x;
     const dz = player.position.z - enemy.mesh.position.z;
     const d = Math.hypot(dx, dz);
-    const touchRange = enemy.hitRadius + PLAYER_HITBOX_RADIUS + 4;
-    if (d <= touchRange && enemy.touchCooldown <= 0) {
-      damagePlayer(enemy.type === 'boss' ? 18 : 7);
-      enemy.touchCooldown = enemy.type === 'boss' ? 0.8 : 0.65;
-    }
 
     if (d <= ENEMY_AGGRO_RANGE) {
       if (d > ENEMY_ATTACK_RANGE) {
@@ -4566,23 +4302,6 @@ function stepViewRecoil(delta) {
   }
 }
 
-function stepScreenShake(delta) {
-  if (screenShakeTime <= 0) {
-    renderer.domElement.style.transform = '';
-    return;
-  }
-  screenShakeTime = Math.max(0, screenShakeTime - delta);
-  const fade = screenShakeTime / 0.16;
-  const amount = screenShakeStrength * Math.max(0, Math.min(1, fade));
-  const x = (Math.random() * 2 - 1) * amount;
-  const y = (Math.random() * 2 - 1) * amount;
-  renderer.domElement.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
-  if (screenShakeTime <= 0) {
-    screenShakeStrength = 0;
-    renderer.domElement.style.transform = '';
-  }
-}
-
 function tryShootOrOpenChest() {
   if (!isGameplayRunning()) return;
   if (isShopOpen()) return;
@@ -4763,7 +4482,7 @@ function stepMovement(delta) {
   const sprintTarget = (keys['shift'] && dirLen > 0) ? 1 : 0;
   const sprintAlpha = 1 - Math.exp(-SPRINT_BLEND_RATE * delta);
   sprintBlend += (sprintTarget - sprintBlend) * sprintAlpha;
-  const speed = THREE.MathUtils.lerp(WALK_SPEED, SPRINT_SPEED, sprintBlend) * getMovementMultiplier();
+  const speed = THREE.MathUtils.lerp(WALK_SPEED, SPRINT_SPEED, sprintBlend);
 
   if (dirLen > 0) {
     const accel = groundedAtStart ? GROUND_ACCEL : AIR_ACCEL;
@@ -4844,8 +4563,6 @@ function animate() {
     updateRespawn(delta);
 
     if (!isRespawningActive()) lifeTimeSurvived += delta;
-    if (!isRespawningActive()) updateClimbStats();
-    stepWaveSystem(delta);
     if (isLocked && !invOpen && !shopOpen && !sceneTransitionActive && !isRespawningActive()) stepMovement(delta);
     shootCooldown -= delta;
     if (rightMouseAutoFire && isLocked && !invOpen && !shopOpen && !sceneTransitionActive && !isRespawningActive()) {
@@ -4869,7 +4586,6 @@ function animate() {
     updateMerchantHint();
     updateCameraView(delta);
     stepViewRecoil(delta);
-    stepScreenShake(delta);
   }
 
   const vis = !thirdPerson;
@@ -4890,7 +4606,6 @@ updateDayNight(0);
 refreshCoinHud();
 refreshHealthHud();
 loadDeadEnemyIds();
-loadProgression();
 bindSettingsUI();
 initBackgroundMusic();
 applyAudioSettingsToUI();
@@ -4934,4 +4649,8 @@ window.addEventListener('focus', () => {
     ensureBackgroundMusicPlayback();
   }
 });
+
+
+
+
 
