@@ -4376,7 +4376,7 @@ const WORLD_LIMIT = (GRASS_AREA * 0.5) - 140;
 
 // physics tuning
 const GRAVITY = 60;
-const JUMP_V = 36;
+const JUMP_V = 58;
 const WALK_SPEED = 200;
 const SPRINT_SPEED = 520;
 const GROUND_ACCEL = 820;
@@ -4384,8 +4384,8 @@ const AIR_ACCEL = 260;
 const GROUND_FRICTION = 9.5;
 const AIR_FRICTION = 1.25;
 const SPRINT_BLEND_RATE = 6.5;
-const JUMP_HOLD_TIME = 0.2;
-const JUMP_HOLD_ACCEL = 72;
+const JUMP_HOLD_TIME = 0.28;
+const JUMP_HOLD_ACCEL = 110;
 const JUMP_RELEASE_CUT = 0.5;
 const JUMP_BUFFER_TIME = 0.14;
 const COYOTE_TIME = 0.12;
