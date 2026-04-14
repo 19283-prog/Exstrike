@@ -1,4 +1,12 @@
 ﻿body { margin:0; overflow:hidden; background:#000; font-family:system-ui,sans-serif; }
+body > canvas{
+  position:fixed;
+  inset:0;
+  width:100vw !important;
+  height:100vh !important;
+  display:block;
+  z-index:0;
+}
 
   #crosshair{
     position:absolute; top:50%; left:50%; width:28px; height:28px;
@@ -454,7 +462,9 @@
   }
   #deathStatsScreen.active{ display:flex; }
   #deathStatsCard{
-    width:min(460px, calc(100vw - 34px));
+    width:min(620px, calc(100vw - 34px));
+    max-height:92vh;
+    overflow:auto;
     background:linear-gradient(180deg, rgba(38,10,10,0.96), rgba(8,8,10,0.96));
     border:2px solid rgba(255,80,80,0.72);
     border-radius:16px;
@@ -473,6 +483,48 @@
     grid-template-columns:1fr 1fr;
     gap:10px;
     margin:18px 0 22px;
+  }
+  #progressionShop{
+    margin:8px 0 20px;
+    padding:12px;
+    border:1px solid rgba(255,177,95,0.35);
+    border-radius:12px;
+    background:rgba(255,177,95,0.07);
+    text-align:left;
+  }
+  #progressionShop h3{
+    margin:0 0 8px;
+    color:#ffe2aa;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    font-size:14px;
+  }
+  #bankedCoinsText{
+    color:#ffd86b;
+    font-weight:900;
+    margin-bottom:8px;
+  }
+  .progressionUpgradeBtn{
+    width:100%;
+    margin-top:7px;
+    padding:9px 10px;
+    border:1px solid rgba(255,220,150,0.5);
+    border-radius:9px;
+    background:rgba(16,12,8,0.86);
+    color:#fff1cf;
+    font-weight:800;
+    cursor:pointer;
+    text-align:left;
+  }
+  .progressionUpgradeBtn:disabled{
+    opacity:0.48;
+    cursor:not-allowed;
+  }
+  .progressionUpgradeBtn small{
+    display:block;
+    margin-top:3px;
+    color:#d6c5a7;
+    font-weight:700;
   }
   .deathStat{
     background:rgba(255,255,255,0.06);
@@ -575,4 +627,5 @@
     font-size:12px;
     line-height:1.25;
   }
+
 
