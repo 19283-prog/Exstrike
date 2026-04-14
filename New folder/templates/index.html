@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Tic-Tac-Toe AI</title>
+  <style>
+    :root {
+      --text: #eef1ff;
+      --panel-bg: rgba(9, 10, 20, 0.58);
+      --panel-border: rgba(255, 255, 255, 0.2);
+      --cell-bg: rgba(255, 255, 255, 0.12);
+      --cell-border: rgba(255, 255, 255, 0.28);
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      color: var(--text);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 20% 15%, #211032 0%, #0a0714 50%, #040308 100%);
+    }
+
+    #space {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      pointer-events: none; /* Keep canvas from blocking board interactions. */
+    }
+
+    .content {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 22px;
+      border-radius: 16px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 20px 65px rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(2px);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+    }
+
+    p {
+      margin: 0 0 10px;
+    }
+
+    #board {
+      display: grid;
+      grid-template-columns: 100px 100px 100px;
+      gap: 6px;
+      margin-top: 12px;
+      width: max-content;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .cell {
+      width: 100px;
+      height: 100px;
+      font-size: 48px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: var(--cell-bg);
+      border: 1px solid var(--cell-border);
+      color: #f7f9ff;
+      text-shadow: 0 0 12px rgba(220, 228, 255, 0.55);
+      cursor: pointer;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="space"></canvas>
+
+  <main class="content">
+    <h1>Tic-Tac-Toe AI</h1>
+    <p>AI vs AI autoplay (X vs O)</p>
+    <p id="status">Starting...</p>
+    <div id="board"></div>
+  </main>
+
+  <script>
+    // ================= Cosmic Background Animation =================
+    // The canvas is full-screen and rendered behind the game panel.
+    // Layers:
+    // 1) Swirling nebula field based on animated trigonometric noise.
+    // 2) Bright streaks moving diagonally like shooting stars.
+    // 3) Soft glowing particles drifting slowly.
+    // requestAnimationFrame drives the loop for smooth animation.
+    const spaceCanvas = document.getElementById('space');
+    const sctx = spaceCanvas.getContext('2d');
+
+    let vw = 0;
+    let vh = 0;
+    let nebulaCols = 0;
+    let nebulaRows = 0;
+    const nebulaStep = 22;
+    const streaks = [];
+    const particles = [];
+    const bursts = [];
+    let lastTs = 0;
+
+    function resizeSpace() {
+      vw = window.innerWidth;
+      vh = window.innerHeight;
+      spaceCanvas.width = vw;
+      spaceCanvas.height = vh;
+      nebulaCols = Math.ceil(vw / nebulaStep);
+      nebulaRows = Math.ceil(vh / nebulaStep);
+    }
+
+    function rand(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function spawnStreak(initial = false) {
+      const speed = rand(280, 620);
+      streaks.push({
+        x: initial ? rand(0, vw) : rand(-vw * 0.25, vw),
+        y: initial ? rand(0, vh) : rand(-vh * 0.4, vh * 0.2),
+        len: rand(90, 220),
+        speedX: speed,
+        speedY: speed * rand(0.35, 0.6),
+        width: rand(1.1, 2.8),
+        alpha: rand(0.42, 0.85)
+      });
+    }
+
+    function spawnParticle(initial = false) {
+      particles.push({
+        x: initial ? rand(0, vw) : rand(0, vw),
+        y: initial ? rand(0, vh) : vh + rand(0, 30),
+        vx: rand(-10, 10),
+        vy: rand(-22, -8),
+        r: rand(1, 3.6),
+        alpha: rand(0.2, 0.65),
+        hue: rand(190, 280),
+        life: rand(8, 20)
+      });
+    }
+
+    function setupCosmos() {
+      resizeSpace();
+      streaks.length = 0;
+      particles.length = 0;
+      for (let i = 0; i < 16; i++) spawnStreak(true);
+      for (let i = 0; i < 95; i++) spawnParticle(true);
+    }
+
+    function nebulaNoise(nx, ny, t) {
+      const a = Math.sin(nx * 3.3 + t * 0.09);
+      const b = Math.cos(ny * 4.1 - t * 0.11);
+      const c = Math.sin((nx + ny) * 3.0 + t * 0.07);
+      const d = Math.cos((nx - ny) * 5.2 - t * 0.05);
+      return (a + b + c + d) * 0.25; // Range about [-1, 1]
+    }
+
+    function drawNebula(t) {
+      const bg = sctx.createLinearGradient(0, 0, vw, vh);
+      bg.addColorStop(0, '#090513');
+      bg.addColorStop(0.55, '#080912');
+      bg.addColorStop(1, '#030206');
+      sctx.fillStyle = bg;
+      sctx.fillRect(0, 0, vw, vh);
+
+      sctx.save();
+      for (let gy = 0; gy < nebulaRows; gy++) {
+        for (let gx = 0; gx < nebulaCols; gx++) {
+          const x = gx * nebulaStep;
+          const y = gy * nebulaStep;
+          const nx = x / vw;
+          const ny = y / vh;
+          const swirl = nebulaNoise(nx, ny, t);
+          if (swirl < 0.18) continue;
+
+          const alpha = Math.min(0.19, (swirl - 0.18) * 0.26);
+          const hue = 250 + swirl * 45 + Math.sin(t * 0.04 + nx * 6.0) * 8;
+          sctx.fillStyle = `hsla(${hue}, 82%, 59%, ${alpha})`;
+          sctx.beginPath();
+          sctx.arc(x + nebulaStep * 0.5, y + nebulaStep * 0.5, nebulaStep * (0.86 + swirl * 0.34), 0, Math.PI * 2);
+          sctx.fill();
+        }
+      }
+      sctx.restore();
+    }
+
+    function drawStreaks(dt) {
+      for (let i = 0; i < streaks.length; i++) {
+        const st = streaks[i];
+        st.x += st.speedX * dt;
+        st.y += st.speedY * dt;
+
+        if (st.x - st.len > vw + 220 || st.y - st.len > vh + 220) {
+          streaks.splice(i, 1);
+          spawnStreak(false);
+          i--;
+          continue;
+        }
+
+        const tx = st.x - st.len;
+        const ty = st.y - st.len * 0.5;
+        const grad = sctx.createLinearGradient(st.x, st.y, tx, ty);
+        grad.addColorStop(0, `rgba(205,225,255,${st.alpha})`);
+        grad.addColorStop(0.35, `rgba(144,184,255,${st.alpha * 0.72})`);
+        grad.addColorStop(1, 'rgba(120,160,255,0)');
+
+        sctx.strokeStyle = grad;
+        sctx.lineWidth = st.width;
+        sctx.beginPath();
+        sctx.moveTo(st.x, st.y);
+        sctx.lineTo(tx, ty);
+        sctx.stroke();
+      }
+    }
+
+    function drawParticles(dt) {
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+
+        if (p.life <= 0 || p.y < -30 || p.x < -30 || p.x > vw + 30) {
+          particles.splice(i, 1);
+          spawnParticle(false);
+          i--;
+          continue;
+        }
+
+        const glow = sctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 6);
+        glow.addColorStop(0, `hsla(${p.hue}, 100%, 82%, ${p.alpha})`);
+        glow.addColorStop(1, 'rgba(255,255,255,0)');
+        sctx.fillStyle = glow;
+        sctx.beginPath();
+        sctx.arc(p.x, p.y, p.r * 6, 0, Math.PI * 2);
+        sctx.fill();
+      }
+    }
+
+    // Creates a short-lived radial light burst at the selected board cell.
+    function emitCellBurst(cellIndex, mark) {
+      const cell = boardDiv.children[cellIndex];
+      if (!cell) return;
+
+      const rect = cell.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const hue = mark === 'X' ? 205 : 320;
+
+      const sparks = [];
+      const sparkCount = 24;
+      for (let i = 0; i < sparkCount; i++) {
+        const a = (Math.PI * 2 * i) / sparkCount + rand(-0.12, 0.12);
+        const speed = rand(65, 220);
+        sparks.push({
+          x: cx,
+          y: cy,
+          vx: Math.cos(a) * speed,
+          vy: Math.sin(a) * speed,
+          r: rand(1.2, 3.2),
+          life: rand(0.45, 0.9),
+          maxLife: rand(0.45, 0.9)
+        });
+      }
+
+      bursts.push({
+        x: cx,
+        y: cy,
+        hue,
+        life: 0.5,
+        maxLife: 0.5,
+        ring: 8,
+        sparks
+      });
+    }
+
+    function drawBursts(dt) {
+      for (let i = 0; i < bursts.length; i++) {
+        const b = bursts[i];
+        b.life -= dt;
+        b.ring += 240 * dt;
+        const lifeT = Math.max(0, b.life / b.maxLife);
+
+        const ringAlpha = lifeT * 0.6;
+        sctx.strokeStyle = `hsla(${b.hue}, 100%, 72%, ${ringAlpha})`;
+        sctx.lineWidth = 2.2;
+        sctx.beginPath();
+        sctx.arc(b.x, b.y, b.ring, 0, Math.PI * 2);
+        sctx.stroke();
+
+        const coreGlow = sctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 48);
+        coreGlow.addColorStop(0, `hsla(${b.hue}, 100%, 80%, ${lifeT * 0.42})`);
+        coreGlow.addColorStop(1, 'rgba(255,255,255,0)');
+        sctx.fillStyle = coreGlow;
+        sctx.beginPath();
+        sctx.arc(b.x, b.y, 48, 0, Math.PI * 2);
+        sctx.fill();
+
+        for (let j = 0; j < b.sparks.length; j++) {
+          const s = b.sparks[j];
+          s.life -= dt;
+          if (s.life <= 0) continue;
+          s.x += s.vx * dt;
+          s.y += s.vy * dt;
+
+          const sa = Math.max(0, s.life / s.maxLife);
+          const glow = sctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 4);
+          glow.addColorStop(0, `hsla(${b.hue}, 100%, 82%, ${sa * 0.8})`);
+          glow.addColorStop(1, 'rgba(255,255,255,0)');
+          sctx.fillStyle = glow;
+          sctx.beginPath();
+          sctx.arc(s.x, s.y, s.r * 4, 0, Math.PI * 2);
+          sctx.fill();
+        }
+
+        if (b.life <= 0) {
+          bursts.splice(i, 1);
+          i--;
+        }
+      }
+    }
+
+    function animateCosmos(ts) {
+      if (!lastTs) lastTs = ts;
+      const dt = Math.min(0.033, (ts - lastTs) / 1000);
+      lastTs = ts;
+      const t = ts / 1000;
+
+      drawNebula(t);
+      drawStreaks(dt);
+      drawParticles(dt);
+      drawBursts(dt);
+
+      requestAnimationFrame(animateCosmos);
+    }
+
+    window.addEventListener('resize', resizeSpace);
+    setupCosmos();
+    requestAnimationFrame(animateCosmos);
+
+    // ================= Tic-Tac-Toe Autoplay =================
+    let board = [' ',' ',' ',' ',' ',' ',' ',' ',' '];
+    let currentPlayer = 'X';
+    const boardDiv = document.getElementById('board');
+    const statusDiv = document.getElementById('status');
+
+    function renderBoard(){
+      boardDiv.innerHTML = '';
+      board.forEach((cell)=>{
+        const div = document.createElement('div');
+        div.className = 'cell';
+        div.textContent = cell;
+        boardDiv.appendChild(div);
+      });
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function resetGame(){
+      const res = await fetch('/reset', { method: 'POST' });
+      const data = await res.json();
+      board = data.board;
+      currentPlayer = 'X';
+      statusDiv.textContent = 'AI vs AI running...';
+      renderBoard();
+    }
+
+    async function playOneMove(){
+      const previousBoard = board.slice();
+      const mover = currentPlayer;
+      const res = await fetch('/ai_move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ board, player: currentPlayer })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        statusDiv.textContent = data.error || 'Server error';
+        return { done: true, result: null };
+      }
+
+      board = data.board;
+      renderBoard();
+      const movedIndex = board.findIndex((cell, idx) => previousBoard[idx] === ' ' && cell === mover);
+      if (movedIndex !== -1) emitCellBurst(movedIndex, mover);
+      if (data.done) {
+        if (data.result === 'draw') statusDiv.textContent = 'Draw';
+        else statusDiv.textContent = data.result + ' wins';
+        return data;
+      }
+
+      currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+      statusDiv.textContent = currentPlayer + ' to move';
+      return data;
+    }
+
+    async function autoplay(){
+      await resetGame();
+      while (true) {
+        await sleep(1000);
+        const result = await playOneMove();
+        if (result.done) {
+          await sleep(2000);
+          await resetGame();
+        }
+      }
+    }
+
+    renderBoard();
+    autoplay();
+  </script>
+</body>
+</html>

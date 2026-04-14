@@ -1,0 +1,127 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" href="data:,">
+<title>Exstrike</title>
+<link rel="stylesheet" href="./css/styles.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="loading">
+  <div>LOADING TEXTURES...</div>
+  <div id="barWrap"><div id="bar"></div></div>
+  <div id="loadText" style="opacity:0.85;font-size:14px;">Starting...</div>
+</div>
+
+<div id="homeScreen" class="active">
+  <div id="homeCard">
+    <h1 id="homeTitle">EXSTRIKE</h1>
+    <div class="menuButtons">
+      <button class="menuBtn" id="homePlayBtn">Play</button>
+      <button class="menuBtn" id="homeSettingsBtn">Settings</button>
+      <button class="menuBtn" id="homeCreditsBtn">Credits</button>
+    </div>
+    <div id="settingsPanel" class="settingsPanel">
+      <div class="settingsRow"><span>Master Volume</span><input id="masterVolumeSlider" type="range" min="0" max="100" value="100"></div>
+      <div class="settingsRow"><span>Music Volume</span><input id="musicVolumeSlider" type="range" min="0" max="100" value="100"></div>
+      <div class="settingsRow"><span>SFX Volume</span><input id="sfxVolumeSlider" type="range" min="0" max="100" value="100"></div>
+      <div class="settingsRow"><span>Mute</span><input id="muteToggle" type="checkbox"></div>
+      <div class="keybindHelp">
+        WASD = Move | SHIFT = Sprint | SPACE = Jump<br>
+        LEFT CLICK = Shoot / Open Chest | R = Reload | P = Return Home | E = Inventory | 1-9 / Scroll = Switch | TAB = 3rd Person
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="pauseMenu">
+  <div id="pauseCard">
+    <h2 style="margin:0 0 10px;letter-spacing:0.12em;">PAUSED</h2>
+    <div class="menuButtons">
+      <button class="menuBtn" id="pauseResumeBtn">Resume</button>
+      <button class="menuBtn" id="pauseSettingsBtn">Settings</button>
+      <button class="menuBtn" id="pauseHomeBtn">Quit to Home</button>
+    </div>
+    <div id="settingsPanelPause" class="settingsPanel"></div>
+  </div>
+</div>
+
+<div id="sceneTransitionOverlay">
+  <div id="sceneTransitionTitle"></div>
+  <div id="sceneTransitionSubtitle">The Combat Begins.</div>
+</div>
+<div id="respawnFadeOverlay"></div>
+
+<div id="crosshair">+</div>
+
+<div id="info">
+  CLICK TO PLAY  -  shorter grass + towers with stairs + chests<br>
+  WASD = Move  *  SHIFT = Sprint  *  SPACE = Jump<br>
+  LEFT CLICK = Shoot / Open Chest  *  R = Reload  *  P = Return Home  *  E = Inventory  *  1-9 or Scroll = Switch  *  TAB = 3rd Person<br>
+  R = Reload  *  Ammo: guns have <b>10 bullets</b> in-mag. Chests give <b>matching ammo</b> for that gun.
+</div>
+
+<div id="clickPrompt">CLICK TO PLAY<br><small>Find chests  *  Climb towers!</small></div>
+<div id="shopHint">MERCHANT NEARBY - LEFT CLICK TO OPEN SHOP</div>
+<div id="musicPopup">
+  <div id="musicPopupTitle"></div>
+  <div id="musicPopupCredit">by CopperCacophonousSitar036838 on Udio</div>
+</div>
+
+<div id="hotbar"></div>
+<div id="gunNamePopup"></div>
+<div id="reloadHint"></div>
+<div id="hitMarker"></div>
+<div id="coinsHud">COINS: 0</div>
+<div id="playerHealthHud">
+  <div id="playerHealthBarWrap"><div id="playerHealthBar"></div></div>
+  <div id="playerHealthText">HP: 10 / 10</div>
+</div>
+<div id="deathStatsScreen">
+  <div id="deathStatsCard">
+    <h2>YOU DIED</h2>
+    <div id="deathStatsList">
+      <div class="deathStat"><span>KILLS</span><div id="deathKills">0</div></div>
+      <div class="deathStat"><span>COINS EARNED</span><div id="deathCoins">0</div></div>
+      <div class="deathStat"><span>DAMAGE DEALT</span><div id="deathDamage">0</div></div>
+      <div class="deathStat"><span>TIME SURVIVED</span><div id="deathTime">0s</div></div>
+    </div>
+    <button id="deathRespawnBtn">Respawn</button>
+  </div>
+</div>
+
+<div id="inventoryScreen">
+  <h2 style="color:#ff0;margin:0 0 10px 0">INVENTORY</h2>
+  <div id="invClock">08:00 AM</div>
+  <div style="color:#fff;opacity:.8;font-size:12px;text-align:center;line-height:1.35">
+    Left click: pick/place/swap  *  Right click: split/place 1  *  Shift+Click: quick move  *  1-9: swap with hotbar
+  </div>
+  <div id="invGrid"></div>
+  <div id="invBottom">
+    <div id="trashSlot" title="Drop an item here to delete it">
+      <div class="trashX">X</div>
+      <div class="trashLabel">TRASH</div>
+    </div>
+  </div>
+</div>
+
+<div id="shopScreen">
+  <h2 style="margin:0;color:#ffd06a;">MERCHANT SHOP</h2>
+  <div id="shopCoins" style="margin-top:6px;font-weight:900;">COINS: 0</div>
+  <div style="margin-top:6px;opacity:.85;font-size:12px;">Upgrade your current run weapons</div>
+  <button class="shopBtn" id="buyFireRate">Fire Rate I - 20 coins</button>
+  <button class="shopBtn" id="buyMag">Magazine +5 - 25 coins</button>
+  <button class="shopBtn" id="shopCloseBtn">Close</button>
+</div>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# Python env
+.venv/
+venv/
+env/
+
+# Unity
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+
+# Cache
+__pycache__/
+*.pyc
+
+# Junk
+*.log
+*.pid
+results/
+stress_*
+
+# Editors
+.vscode/
+.vs/
+.idea/
+
+# Nested repo
+New folder/mkdir shaun-ai/
