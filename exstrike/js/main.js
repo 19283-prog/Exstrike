@@ -39,6 +39,8 @@ const settingsPanelPauseEl = document.getElementById('settingsPanelPause');
 const masterVolumeSliderEl = document.getElementById('masterVolumeSlider');
 const musicVolumeSliderEl = document.getElementById('musicVolumeSlider');
 const sfxVolumeSliderEl = document.getElementById('sfxVolumeSlider');
+const mouseSensitivitySliderEl = document.getElementById('mouseSensitivitySlider');
+const mouseSensitivityValueEl = document.getElementById('mouseSensitivityValue');
 const muteToggleEl = document.getElementById('muteToggle');
 const infoEl = document.getElementById('info');
 const clickPromptEl = document.getElementById('clickPrompt');
@@ -66,6 +68,9 @@ const audioSettings = {
   music: 1,
   sfx: 1,
   muted: false
+};
+const inputSettings = {
+  mouseSensitivity: 1
 };
 let backgroundMusicEl = null;
 let backgroundMusicStarted = false;
@@ -103,6 +108,8 @@ function syncAudioSettingsFromUI() {
   if (musicVolumeSliderEl) audioSettings.music = (Number(musicVolumeSliderEl.value) || 0) / 100;
   if (sfxVolumeSliderEl) audioSettings.sfx = (Number(sfxVolumeSliderEl.value) || 0) / 100;
   if (muteToggleEl) audioSettings.muted = !!muteToggleEl.checked;
+  if (mouseSensitivitySliderEl) inputSettings.mouseSensitivity = THREE.MathUtils.clamp((Number(mouseSensitivitySliderEl.value) || 100) / 100, 0.25, 2);
+  updateMouseSensitivityText();
 }
 
 function applyAudioSettingsToUI() {
@@ -110,15 +117,27 @@ function applyAudioSettingsToUI() {
   if (musicVolumeSliderEl) musicVolumeSliderEl.value = String(Math.round(audioSettings.music * 100));
   if (sfxVolumeSliderEl) sfxVolumeSliderEl.value = String(Math.round(audioSettings.sfx * 100));
   if (muteToggleEl) muteToggleEl.checked = !!audioSettings.muted;
+  if (mouseSensitivitySliderEl) mouseSensitivitySliderEl.value = String(Math.round(inputSettings.mouseSensitivity * 100));
+  updateMouseSensitivityText();
   if (settingsPanelPauseEl) {
     const pMaster = settingsPanelPauseEl.querySelector('#pauseMasterVolumeSlider');
     const pMusic = settingsPanelPauseEl.querySelector('#pauseMusicVolumeSlider');
     const pSfx = settingsPanelPauseEl.querySelector('#pauseSfxVolumeSlider');
+    const pMouse = settingsPanelPauseEl.querySelector('#pauseMouseSensitivitySlider');
     const pMute = settingsPanelPauseEl.querySelector('#pauseMuteToggle');
     if (pMaster) pMaster.value = String(Math.round(audioSettings.master * 100));
     if (pMusic) pMusic.value = String(Math.round(audioSettings.music * 100));
     if (pSfx) pSfx.value = String(Math.round(audioSettings.sfx * 100));
+    if (pMouse) pMouse.value = String(Math.round(inputSettings.mouseSensitivity * 100));
     if (pMute) pMute.checked = !!audioSettings.muted;
+    const pMouseValue = settingsPanelPauseEl.querySelector('#pauseMouseSensitivityValue');
+    if (pMouseValue) pMouseValue.textContent = `Mouse Sensitivity: ${Math.round(inputSettings.mouseSensitivity * 100)}%`;
+  }
+}
+
+function updateMouseSensitivityText() {
+  if (mouseSensitivityValueEl) {
+    mouseSensitivityValueEl.textContent = `Mouse Sensitivity: ${Math.round(inputSettings.mouseSensitivity * 100)}%`;
   }
 }
 
@@ -371,6 +390,8 @@ if (settingsPanelPauseEl) {
     <div class="settingsRow"><span>Master Volume</span><input id="pauseMasterVolumeSlider" type="range" min="0" max="100" value="100"></div>
     <div class="settingsRow"><span>Music Volume</span><input id="pauseMusicVolumeSlider" type="range" min="0" max="100" value="100"></div>
     <div class="settingsRow"><span>SFX Volume</span><input id="pauseSfxVolumeSlider" type="range" min="0" max="100" value="100"></div>
+    <div class="settingsRow"><span>Mouse Sensitivity</span><input id="pauseMouseSensitivitySlider" type="range" min="25" max="200" value="100"></div>
+    <div class="settingsValue" id="pauseMouseSensitivityValue">Mouse Sensitivity: 100%</div>
     <div class="settingsRow"><span>Mute</span><input id="pauseMuteToggle" type="checkbox"></div>
     <div class="keybindHelp">
       WASD = Move | SHIFT = Sprint | SPACE = Jump<br>
@@ -387,27 +408,34 @@ function bindSettingsUI() {
       const pMaster = settingsPanelPauseEl.querySelector('#pauseMasterVolumeSlider');
       const pMusic = settingsPanelPauseEl.querySelector('#pauseMusicVolumeSlider');
       const pSfx = settingsPanelPauseEl.querySelector('#pauseSfxVolumeSlider');
+      const pMouse = settingsPanelPauseEl.querySelector('#pauseMouseSensitivitySlider');
       const pMute = settingsPanelPauseEl.querySelector('#pauseMuteToggle');
       if (pMaster) pMaster.value = masterVolumeSliderEl.value;
       if (pMusic) pMusic.value = musicVolumeSliderEl.value;
       if (pSfx) pSfx.value = sfxVolumeSliderEl.value;
+      if (pMouse && mouseSensitivitySliderEl) pMouse.value = mouseSensitivitySliderEl.value;
       if (pMute) pMute.checked = muteToggleEl.checked;
+      const pMouseValue = settingsPanelPauseEl.querySelector('#pauseMouseSensitivityValue');
+      if (pMouseValue) pMouseValue.textContent = `Mouse Sensitivity: ${Math.round(inputSettings.mouseSensitivity * 100)}%`;
     }
   };
   if (masterVolumeSliderEl) masterVolumeSliderEl.addEventListener('input', onAnyChange);
   if (musicVolumeSliderEl) musicVolumeSliderEl.addEventListener('input', onAnyChange);
   if (sfxVolumeSliderEl) sfxVolumeSliderEl.addEventListener('input', onAnyChange);
+  if (mouseSensitivitySliderEl) mouseSensitivitySliderEl.addEventListener('input', onAnyChange);
   if (muteToggleEl) muteToggleEl.addEventListener('change', onAnyChange);
 
   if (settingsPanelPauseEl) {
     const pMaster = settingsPanelPauseEl.querySelector('#pauseMasterVolumeSlider');
     const pMusic = settingsPanelPauseEl.querySelector('#pauseMusicVolumeSlider');
     const pSfx = settingsPanelPauseEl.querySelector('#pauseSfxVolumeSlider');
+    const pMouse = settingsPanelPauseEl.querySelector('#pauseMouseSensitivitySlider');
     const pMute = settingsPanelPauseEl.querySelector('#pauseMuteToggle');
     const onPauseChange = () => {
       if (pMaster) audioSettings.master = (Number(pMaster.value) || 0) / 100;
       if (pMusic) audioSettings.music = (Number(pMusic.value) || 0) / 100;
       if (pSfx) audioSettings.sfx = (Number(pSfx.value) || 0) / 100;
+      if (pMouse) inputSettings.mouseSensitivity = THREE.MathUtils.clamp((Number(pMouse.value) || 100) / 100, 0.25, 2);
       if (pMute) audioSettings.muted = !!pMute.checked;
       applyAudioSettingsToUI();
       applyAudioSettings();
@@ -415,8 +443,19 @@ function bindSettingsUI() {
     if (pMaster) pMaster.addEventListener('input', onPauseChange);
     if (pMusic) pMusic.addEventListener('input', onPauseChange);
     if (pSfx) pSfx.addEventListener('input', onPauseChange);
+    if (pMouse) pMouse.addEventListener('input', onPauseChange);
     if (pMute) pMute.addEventListener('change', onPauseChange);
   }
+}
+
+function showHomePage(page) {
+  const selected = page || 'options';
+  document.querySelectorAll('.homeTab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.homePage === selected);
+  });
+  document.querySelectorAll('[data-home-page-panel]').forEach(panel => {
+    panel.classList.toggle('active', panel.dataset.homePagePanel === selected);
+  });
 }
 
 // =====================
@@ -1081,8 +1120,9 @@ document.addEventListener('mousemove', (e) => {
   if (isShopOpen()) return;
   if (isRespawningActive()) return;
 
-  yaw -= e.movementX * 0.005;
-  pitch -= e.movementY * 0.005;
+  const lookSpeed = 0.005 * inputSettings.mouseSensitivity;
+  yaw -= e.movementX * lookSpeed;
+  pitch -= e.movementY * lookSpeed;
   pitch = Math.max(-Math.PI / 2.3, Math.min(Math.PI / 2.3, pitch));
   player.rotation.y = yaw;
   camera.rotation.x = pitch;
@@ -4570,6 +4610,7 @@ bindSettingsUI();
 initBackgroundMusic();
 applyAudioSettingsToUI();
 applyAudioSettings();
+showHomePage('options');
 setGameState(GAME_STATE.HOME);
 
 const fireBtnEl = document.getElementById('buyFireRate');
@@ -4583,12 +4624,8 @@ document.addEventListener('click', ensureBackgroundMusicPlaybackAfterPlay, { pas
 document.addEventListener('pointerdown', ensureBackgroundMusicPlaybackAfterPlay, { passive: true });
 document.addEventListener('touchstart', ensureBackgroundMusicPlaybackAfterPlay, { passive: true });
 document.addEventListener('keydown', ensureBackgroundMusicPlaybackAfterPlay);
-if (homeSettingsBtnEl) homeSettingsBtnEl.addEventListener('click', () => {
-  const next = !(settingsPanelEl && settingsPanelEl.classList.contains('active'));
-  setSettingsVisible(next, false);
-});
-if (homeCreditsBtnEl) homeCreditsBtnEl.addEventListener('click', () => {
-  alert('Exstrike\nCreated by Shaun');
+document.querySelectorAll('.homeTab').forEach(btn => {
+  btn.addEventListener('click', () => showHomePage(btn.dataset.homePage));
 });
 if (pauseResumeBtnEl) pauseResumeBtnEl.addEventListener('click', () => resumeGame());
 if (pauseSettingsBtnEl) pauseSettingsBtnEl.addEventListener('click', () => {

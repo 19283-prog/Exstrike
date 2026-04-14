@@ -24,20 +24,42 @@
 
 <div id="homeScreen" class="active">
   <div id="homeCard">
-    <h1 id="homeTitle">EXSTRIKE</h1>
-    <div class="menuButtons">
-      <button class="menuBtn" id="homePlayBtn">Play</button>
-      <button class="menuBtn" id="homeSettingsBtn">Settings</button>
-      <button class="menuBtn" id="homeCreditsBtn">Credits</button>
+    <div class="homeHero">
+      <div class="homeEyebrow">Browser survival shooter</div>
+      <h1 id="homeTitle">EXSTRIKE</h1>
+      <p class="homeTagline">Climb the tower. Cross into the combat zone. Crush everything that moves.</p>
+      <button class="menuBtn primaryStart" id="homePlayBtn">Start Crushing</button>
     </div>
-    <div id="settingsPanel" class="settingsPanel">
+
+    <div class="homeTabs" aria-label="Home menu pages">
+      <button class="homeTab active" data-home-page="options">Options</button>
+      <button class="homeTab" data-home-page="controls">Controls</button>
+      <button class="homeTab" data-home-page="credits">Credits</button>
+    </div>
+
+    <div id="settingsPanel" class="settingsPanel active homePagePanel" data-home-page-panel="options">
+      <h2>Options</h2>
       <div class="settingsRow"><span>Master Volume</span><input id="masterVolumeSlider" type="range" min="0" max="100" value="100"></div>
       <div class="settingsRow"><span>Music Volume</span><input id="musicVolumeSlider" type="range" min="0" max="100" value="100"></div>
       <div class="settingsRow"><span>SFX Volume</span><input id="sfxVolumeSlider" type="range" min="0" max="100" value="100"></div>
+      <div class="settingsRow"><span>Mouse Sensitivity</span><input id="mouseSensitivitySlider" type="range" min="25" max="200" value="100"></div>
+      <div class="settingsValue" id="mouseSensitivityValue">Mouse Sensitivity: 100%</div>
       <div class="settingsRow"><span>Mute</span><input id="muteToggle" type="checkbox"></div>
+    </div>
+
+    <div class="settingsPanel homePagePanel" data-home-page-panel="controls">
+      <h2>Controls</h2>
       <div class="keybindHelp">
         WASD = Move | SHIFT = Sprint | SPACE = Jump<br>
         LEFT CLICK = Shoot / Open Chest | R = Reload | P = Return Home | E = Inventory | 1-9 / Scroll = Switch | TAB = 3rd Person
+      </div>
+    </div>
+
+    <div class="settingsPanel homePagePanel" data-home-page-panel="credits">
+      <h2>Credits</h2>
+      <div class="keybindHelp">
+        Exstrike by Shaun.<br>
+        Music attribution: CopperCacophonousSitar036838 on Udio.
       </div>
     </div>
   </div>
