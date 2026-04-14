@@ -4375,7 +4375,7 @@ const vel = new THREE.Vector3();
 const WORLD_LIMIT = (GRASS_AREA * 0.5) - 140;
 
 // physics tuning
-const GRAVITY = 60;
+const GRAVITY = 105;
 const JUMP_V = 58;
 const WALK_SPEED = 200;
 const SPRINT_SPEED = 520;
