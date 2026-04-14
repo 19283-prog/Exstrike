@@ -2658,6 +2658,11 @@ function showGunPopupIfAny() {
 
 window.addEventListener('keydown', (e) => {
   keys[e.key.toLowerCase()] = true;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    keys[' '] = true;
+    jumpRequestTimer = JUMP_BUFFER_TIME;
+  }
   if (e.key === 'Escape') {
     if (isRespawningActive()) return;
     if (gameState === GAME_STATE.PLAYING) {
@@ -2757,6 +2762,7 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
   keys[e.key.toLowerCase()] = false;
+  if (e.code === 'Space') keys[' '] = false;
 });
 
 document.addEventListener('wheel', (e) => {
@@ -4381,9 +4387,13 @@ const SPRINT_BLEND_RATE = 6.5;
 const JUMP_HOLD_TIME = 0.2;
 const JUMP_HOLD_ACCEL = 50;
 const JUMP_RELEASE_CUT = 0.5;
+const JUMP_BUFFER_TIME = 0.14;
+const COYOTE_TIME = 0.12;
 let sprintBlend = 0;
 let jumpHoldTimer = 0;
 let jumpHeldLastFrame = false;
+let jumpRequestTimer = 0;
+let coyoteTimer = 0;
 
 function accelerateHorizontal(targetX, targetZ, accel, delta) {
   const dx = targetX - vel.x;
@@ -4452,6 +4462,7 @@ function stepMovement(delta) {
   const prevX = player.position.x;
   const prevZ = player.position.z;
   const jumpHeld = !!keys[' '];
+  jumpRequestTimer = Math.max(0, jumpRequestTimer - delta);
 
   // Ground state before horizontal integration: used for traction/friction and jump start.
   const startGroundY = sampleGroundHeight(player.position.x, player.position.z, player.position.y);
@@ -4459,6 +4470,13 @@ function stepMovement(delta) {
   if (groundedAtStart) {
     player.position.y = startGroundY;
     vel.y = 0;
+    coyoteTimer = COYOTE_TIME;
+  } else {
+    coyoteTimer = Math.max(0, coyoteTimer - delta);
+  }
+
+  if (jumpHeld && !jumpHeldLastFrame) {
+    jumpRequestTimer = JUMP_BUFFER_TIME;
   }
 
   let ix = 0, iz = 0;
@@ -4491,9 +4509,11 @@ function stepMovement(delta) {
     applyHorizontalFriction(groundedAtStart ? GROUND_FRICTION : AIR_FRICTION, delta);
   }
 
-  if (groundedAtStart && jumpHeld && !jumpHeldLastFrame) {
+  if (jumpRequestTimer > 0 && coyoteTimer > 0) {
     vel.y = JUMP_V;
     jumpHoldTimer = JUMP_HOLD_TIME;
+    jumpRequestTimer = 0;
+    coyoteTimer = 0;
   }
   if (!jumpHeld && jumpHeldLastFrame && vel.y > 0) {
     vel.y *= JUMP_RELEASE_CUT;
