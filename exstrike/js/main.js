@@ -376,6 +376,7 @@ function quitToHome() {
   player.position.set(START_SPAWN.x, START_SPAWN.y, START_SPAWN.z);
   const spawnGroundY = sampleGroundHeight(player.position.x, player.position.z, player.position.y);
   player.position.y = spawnGroundY + RESPAWN_STANDING_OFFSET;
+  resetCameraSmoothing();
   vel.set(0, 0, 0);
   playerHealth = PLAYER_MAX_HP;
   refreshHealthHud();
@@ -1068,12 +1069,21 @@ const _lookWorld = new THREE.Vector3();
 
 let yaw = 0;
 let pitch = 0;
+let smoothedCameraWorldY = player.position.y;
 
 function updateCameraView(delta) {
   const lerpFast = Math.min(1, delta * 18);
   const lerpSlow = Math.min(1, delta * 10);
+  const yDelta = Math.abs(smoothedCameraWorldY - player.position.y);
+  if (yDelta > 180) {
+    smoothedCameraWorldY = player.position.y;
+  } else {
+    const yAlpha = 1 - Math.exp(-14 * delta);
+    smoothedCameraWorldY += (player.position.y - smoothedCameraWorldY) * yAlpha;
+  }
 
   if (!thirdPerson) {
+    firstPersonOffset.y = smoothedCameraWorldY - player.position.y;
     camera.position.lerp(firstPersonOffset, lerpFast);
     return;
   }
@@ -1091,6 +1101,12 @@ function updateCameraView(delta) {
   player.localToWorld(_lookWorld);
   camera.lookAt(_lookWorld);
   camera.rotation.order = 'YXZ';
+}
+
+function resetCameraSmoothing() {
+  smoothedCameraWorldY = player.position.y;
+  firstPersonOffset.y = 0;
+  camera.position.y = 0;
 }
 
 // =====================
@@ -2862,6 +2878,7 @@ function completeRespawnAtStart() {
   player.position.set(START_SPAWN.x, START_SPAWN.y, START_SPAWN.z);
   const spawnGroundY = sampleGroundHeight(player.position.x, player.position.z, player.position.y);
   player.position.y = spawnGroundY + RESPAWN_STANDING_OFFSET;
+  resetCameraSmoothing();
   vel.set(0, 0, 0);
   playerHealth = PLAYER_MAX_HP;
   refreshHealthHud();
@@ -2882,6 +2899,7 @@ function returnToStartArea() {
   player.position.set(START_SPAWN.x, START_SPAWN.y, START_SPAWN.z);
   const spawnGroundY = sampleGroundHeight(player.position.x, player.position.z, player.position.y);
   player.position.y = spawnGroundY + RESPAWN_STANDING_OFFSET;
+  resetCameraSmoothing();
   vel.set(0, 0, 0);
   clearEnemyProjectiles();
   sceneTransitionCooldown = SCENE_TRANSITION_COOLDOWN;
@@ -2965,6 +2983,7 @@ function teleportToCombatArea() {
   vel.set(0, 0, 0);
   const spawnGroundY = sampleGroundHeight(player.position.x, player.position.z, player.position.y);
   player.position.y = spawnGroundY;
+  resetCameraSmoothing();
   ensureCombatEnemiesSpawned();
 }
 
