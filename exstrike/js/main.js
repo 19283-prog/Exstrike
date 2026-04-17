@@ -3237,6 +3237,7 @@ const activeMuzzleFlashes = [];
 const activeSmokeBursts = [];
 const activeImpactBursts = [];
 const activeShells = [];
+const activeFloatingTexts = [];
 
 const projectileGeometry = new THREE.SphereGeometry(0.55, 8, 8);
 const projectileMaterial = new THREE.MeshStandardMaterial({
@@ -3284,6 +3285,7 @@ const _spreadDir = new THREE.Vector3();
 const _tmpV0 = new THREE.Vector3();
 const _tmpV1 = new THREE.Vector3();
 const _tmpV2 = new THREE.Vector3();
+const _tmpColor0 = new THREE.Color();
 const _chestCenter = new THREE.Vector3();
 
 function dampScalar(current, target, lambda, delta) {
@@ -3377,6 +3379,13 @@ const coinDropMaterial = new THREE.MeshStandardMaterial({
   roughness: 0.32,
   metalness: 0.62
 });
+const enemyFlashMaterial = new THREE.MeshBasicMaterial({
+  color: 0xff3528,
+  transparent: true,
+  opacity: 0.55,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending
+});
 const enemyHealthBackMaterial = new THREE.MeshBasicMaterial({
   color: 0x260000,
   transparent: true,
@@ -3405,6 +3414,100 @@ function setEnemyDebugVisible(v) {
   for (const p of enemyProjectiles) {
     if (p.debugMesh) p.debugMesh.visible = enemyDebugVisible;
   }
+}
+
+function createTextSprite(text, {
+  color = '#ffffff',
+  stroke = 'rgba(0,0,0,0.85)',
+  fontSize = 40,
+  padding = 14,
+  scale = 1
+} = {}) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = `900 ${fontSize}px Arial`;
+  const metrics = ctx.measureText(text);
+  canvas.width = Math.ceil(metrics.width + padding * 2);
+  canvas.height = Math.ceil(fontSize + padding * 2);
+  ctx.font = `900 ${fontSize}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(4, fontSize * 0.12);
+  ctx.strokeStyle = stroke;
+  ctx.fillStyle = color;
+  ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  const mat = new THREE.SpriteMaterial({
+    map: tex,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false
+  });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(canvas.width * 0.22 * scale, canvas.height * 0.22 * scale, 1);
+  sprite.renderOrder = 50;
+  return sprite;
+}
+
+function spawnFloatingText(text, position, options = {}) {
+  const sprite = createTextSprite(text, options);
+  sprite.position.copy(position);
+  scene.add(sprite);
+  activeFloatingTexts.push({
+    sprite,
+    age: 0,
+    life: options.life ?? 0.92,
+    baseScale: sprite.scale.clone(),
+    vel: new THREE.Vector3(
+      (Math.random() - 0.5) * (options.drift ?? 14),
+      options.rise ?? 34,
+      (Math.random() - 0.5) * (options.drift ?? 14)
+    )
+  });
+}
+
+function stepFloatingTexts(delta) {
+  for (let i = activeFloatingTexts.length - 1; i >= 0; i--) {
+    const ft = activeFloatingTexts[i];
+    ft.age += delta;
+    ft.sprite.position.addScaledVector(ft.vel, delta);
+    ft.vel.y -= 12 * delta;
+    const t = ft.age / ft.life;
+    const k = Math.max(0, 1 - t);
+    ft.sprite.material.opacity = k;
+    ft.sprite.scale.copy(ft.baseScale).multiplyScalar(0.82 + Math.sin(Math.min(1, t) * Math.PI) * 0.22);
+    if (ft.age >= ft.life) {
+      scene.remove(ft.sprite);
+      ft.sprite.material.map?.dispose();
+      ft.sprite.material.dispose();
+      activeFloatingTexts.splice(i, 1);
+    }
+  }
+}
+
+function flashEnemy(enemy) {
+  if (!enemy?.mesh) return;
+  enemy.flashTimer = 0.13;
+  if (!enemy.flashOverlay) {
+    const overlay = enemy.mesh.clone(true);
+    overlay.position.set(0, 0, 0);
+    overlay.rotation.set(0, 0, 0);
+    overlay.scale.set(1, 1, 1);
+    overlay.traverse(o => {
+      if (o.isMesh) {
+        o.material = enemyFlashMaterial;
+        o.castShadow = false;
+        o.receiveShadow = false;
+      }
+    });
+    overlay.visible = false;
+    enemy.mesh.add(overlay);
+    enemy.flashOverlay = overlay;
+  }
+  enemy.flashOverlay.visible = true;
 }
 
 function getGroundHeightAt(x, z, currentY = BASE_GROUND_Y) {
@@ -3644,7 +3747,10 @@ function spawnEnemy(type, x, z, id) {
     spawn: new THREE.Vector2(x, z),
     patrolTarget: new THREE.Vector2(x, z),
     waitTimer: Math.random() * 1.2,
-    shotCooldown: Math.random() * (def.fireInterval ?? ENEMY_FIRE_INTERVAL)
+    shotCooldown: Math.random() * (def.fireInterval ?? ENEMY_FIRE_INTERVAL),
+    knockbackVel: new THREE.Vector2(0, 0),
+    flashTimer: 0,
+    flashOverlay: null
   };
   createEnemyHealthBar(enemy);
   assignEnemyPatrolTarget(enemy);
@@ -3755,6 +3861,15 @@ function killEnemyAt(index) {
   const dropAmount = enemy.type === 'boss'
     ? 35 + Math.floor(Math.random() * 26)
     : 5 + Math.floor(Math.random() * 11); // 5..15, boss 35..60
+  _tmpV1.set(enemy.mesh.position.x, enemy.mesh.position.y + enemy.eyeY + 34, enemy.mesh.position.z);
+  spawnFloatingText(`KILL +${dropAmount} COINS`, _tmpV1, {
+    color: '#ffd75e',
+    fontSize: enemy.type === 'boss' ? 42 : 34,
+    scale: enemy.type === 'boss' ? 1.35 : 1.0,
+    rise: 42,
+    drift: 8,
+    life: 1.25
+  });
   spawnEnemyCoinDrop(enemy.mesh.position, dropAmount);
   scene.remove(enemy.mesh);
   combatEnemies.splice(index, 1);
@@ -3766,6 +3881,22 @@ function damageEnemyAt(index, amount = 1) {
   const before = Math.max(0, enemy.hp);
   enemy.hp -= amount;
   lifeDamageDealt += Math.min(amount, before);
+  flashEnemy(enemy);
+  camera.getWorldDirection(_tmpV0);
+  const knockStrength = enemy.type === 'boss' ? 95 : enemy.type === 'monster' ? 145 : 175;
+  enemy.knockbackVel.x += _tmpV0.x * knockStrength;
+  enemy.knockbackVel.y += _tmpV0.z * knockStrength;
+  _tmpV1.set(
+    enemy.mesh.position.x + (Math.random() - 0.5) * 10,
+    enemy.mesh.position.y + enemy.eyeY + 18,
+    enemy.mesh.position.z
+  );
+  spawnFloatingText(`-${amount}`, _tmpV1, {
+    color: enemy.hp <= 0 ? '#ffdf72' : '#ff5952',
+    fontSize: enemy.hp <= 0 ? 48 : 38,
+    scale: enemy.hp <= 0 ? 1.15 : 0.95,
+    life: 0.75
+  });
   showHitMarker();
   updateEnemyHealthBar(enemy);
   if (enemy.hp <= 0) {
@@ -3788,6 +3919,15 @@ function findEnemyHitOnSegment(a, b, projectileRadius) {
 function stepEnemies(delta) {
   if (combatEnemies.length === 0) return;
   for (const enemy of combatEnemies) {
+    if (enemy.flashTimer > 0) {
+      enemy.flashTimer = Math.max(0, enemy.flashTimer - delta);
+      if (enemy.flashOverlay) enemy.flashOverlay.visible = enemy.flashTimer > 0;
+    }
+    if (enemy.knockbackVel?.lengthSq() > 0.02) {
+      enemy.mesh.position.x += enemy.knockbackVel.x * delta;
+      enemy.mesh.position.z += enemy.knockbackVel.y * delta;
+      enemy.knockbackVel.multiplyScalar(Math.exp(-7.5 * delta));
+    }
     enemy.mesh.position.y = getGroundHeightAt(enemy.mesh.position.x, enemy.mesh.position.z, enemy.mesh.position.y) + enemy.groundOffset;
     const dx = player.position.x - enemy.mesh.position.x;
     const dz = player.position.z - enemy.mesh.position.z;
@@ -3886,6 +4026,14 @@ function stepCoinDrops(delta) {
     if ((dx * dx + dz * dz) <= 85 * 85) {
       coins += drop.amount;
       lifeCoinsEarned += drop.amount;
+      spawnFloatingText(`+${drop.amount}`, drop.mesh.position.clone().add(_tmpV0.set(0, 22, 0)), {
+        color: '#ffe37a',
+        fontSize: 30,
+        scale: 0.82,
+        rise: 28,
+        drift: 5,
+        life: 0.7
+      });
       playGameSfx('coin');
       refreshCoinHud();
       scene.remove(drop.mesh);
@@ -3997,7 +4145,7 @@ function spawnSmokeBurst(origin, dir, opts = {}) {
 }
 
 function spawnImpactBurst(position, strength = 1) {
-  const count = Math.floor(8 + strength * 9);
+  const count = Math.floor(14 + strength * 16);
   const geo = new THREE.BufferGeometry();
   const positions = new Float32Array(count * 3);
   const velocities = new Float32Array(count * 3);
@@ -4012,16 +4160,17 @@ function spawnImpactBurst(position, strength = 1) {
       Math.random() * 1.4,
       (Math.random() - 0.5)
     ).normalize();
-    const speed = 36 + Math.random() * 42 * strength;
+    const speed = 48 + Math.random() * 64 * strength;
     velocities[i3 + 0] = dir.x * speed;
     velocities[i3 + 1] = dir.y * speed;
     velocities[i3 + 2] = dir.z * speed;
   }
 
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  _tmpColor0.setHSL(0.08 + Math.random() * 0.05, 1, 0.62 + Math.random() * 0.12);
   const mat = new THREE.PointsMaterial({
-    color: 0xffc476,
-    size: 4.2 + strength * 1.3,
+    color: _tmpColor0,
+    size: 5.2 + strength * 1.8,
     map: softParticleTex,
     transparent: true,
     opacity: 1,
@@ -4037,19 +4186,19 @@ function spawnImpactBurst(position, strength = 1) {
     points,
     velocities,
     age: 0,
-    life: 0.22 + strength * 0.15,
+    life: 0.28 + strength * 0.18,
     drag: 6.4,
-    gravity: 110,
+    gravity: 130,
     baseOpacity: 1
   });
 
   spawnSmokeBurst(position, _tmpV0.set(0, 1, 0), {
-    count: 4 + Math.floor(strength * 5),
+    count: 6 + Math.floor(strength * 7),
     life: 0.35 + strength * 0.2,
-    size: 6 + strength * 1.4,
-    speed: 10 + strength * 6,
+    size: 7 + strength * 1.8,
+    speed: 12 + strength * 7,
     spread: 8 + strength * 4,
-    opacity: 0.45
+    opacity: 0.5
   });
 }
 
@@ -4621,6 +4770,7 @@ function animate() {
     stepSmokeBursts(delta);
     stepImpactBursts(delta);
     stepShells(delta);
+    stepFloatingTexts(delta);
     updateDayNight(delta);
     updateMerchantHint();
     updateCameraView(delta);
