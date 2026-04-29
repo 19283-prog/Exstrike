@@ -3787,6 +3787,7 @@ const enemyProjectiles = [];
 const coinDrops = [];
 const deadEnemyIds = new Set();
 const DEAD_ENEMIES_STORAGE_KEY = 'exstrike_dead_enemy_ids';
+const ENEMIES_ENABLED = false;
 
 const ENEMY_PATROL_RADIUS = 400;
 const ENEMY_AGGRO_RANGE = 500;
@@ -3974,6 +3975,15 @@ function saveDeadEnemyIds() {
   try {
     localStorage.setItem(DEAD_ENEMIES_STORAGE_KEY, JSON.stringify(Array.from(deadEnemyIds)));
   } catch (_) {}
+}
+
+function clearCombatEnemies() {
+  for (let i = combatEnemies.length - 1; i >= 0; i--) {
+    const enemy = combatEnemies[i];
+    if (enemy?.mesh) scene.remove(enemy.mesh);
+    combatEnemies.splice(i, 1);
+  }
+  clearEnemyProjectiles();
 }
 
 function loadDeadEnemyIds() {
@@ -4214,6 +4224,10 @@ function spawnEnemy(type, x, z, id) {
 }
 
 function spawnCombatEnemies() {
+  if (!ENEMIES_ENABLED) {
+    clearCombatEnemies();
+    return;
+  }
   if (combatEnemies.length > 0) return;
   ensureCombatEnemySpawnPlan();
   let spawned = 0;
@@ -4235,6 +4249,11 @@ function spawnCombatEnemies() {
 }
 
 function ensureCombatEnemiesSpawned() {
+  if (!ENEMIES_ENABLED) {
+    clearCombatEnemies();
+    combatEnemiesInitialized = true;
+    return;
+  }
   spawnCombatEnemies();
   if (combatEnemies.length === 0) {
     console.warn('Combat enemies failed to spawn near the teleport point.');
