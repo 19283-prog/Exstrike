@@ -674,7 +674,15 @@ const MEGA_TOWER_DOOR_WIDTH = 240;
 const INTRO_CENTER_Z = 2800;
 const START_AREA_CENTER_X = 0;
 const START_AREA_CENTER_Z = 2850;
+const COMBAT_CENTER_X = -8600;
+const COMBAT_CENTER_Z = -8200;
 const spawnMountainColliders = []; // { x, z, radius }
+const combatTerrainMountains = [];
+const combatWaterBodies = [];
+const combatAnimatedWaters = [];
+const combatWaterfallMists = [];
+const combatCaveEntrances = [];
+let combatBiomeGroup = null;
 const ENTRANCE_PATH_CLEAR_BOX = {
   xMin: -260,
   xMax: 260,
@@ -930,6 +938,449 @@ createMegaTowerShell();
 createIntroMountains();
 createSpawnMountainRing();
 createSpawnGatePillarMountains();
+
+function makeFernAlphaTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, c.width, c.height);
+  g.translate(c.width * 0.5, c.height * 0.95);
+
+  const leaf = (ang, len, width, color) => {
+    g.save();
+    g.rotate(ang);
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.quadraticCurveTo(width, -len * 0.36, 0, -len);
+    g.quadraticCurveTo(-width, -len * 0.36, 0, 0);
+    g.closePath();
+    g.fillStyle = color;
+    g.fill();
+    g.restore();
+  };
+
+  for (let i = 0; i < 8; i++) {
+    const ang = (-0.95 + (i / 7) * 1.9) + (Math.random() - 0.5) * 0.08;
+    leaf(ang, 78 + Math.random() * 34, 14 + Math.random() * 7, i % 2 ? '#9fdc82' : '#72b35f');
+  }
+  g.resetTransform();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const fernAlpha = makeFernAlphaTexture();
+
+function createCombatFernPatch(count = 1500) {
+  const geo = new THREE.PlaneGeometry(26, 34);
+  geo.translate(0, 17, 0);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x457d3b,
+    emissive: 0x10260f,
+    emissiveIntensity: 0.08,
+    roughness: 0.94,
+    metalness: 0.0,
+    transparent: true,
+    alphaMap: fernAlpha,
+    alphaTest: 0.18,
+    side: THREE.DoubleSide
+  });
+  const mesh = new THREE.InstancedMesh(geo, mat, count);
+  const dummy = new THREE.Object3D();
+
+  for (let i = 0; i < count; i++) {
+    let placed = false;
+    for (let tries = 0; tries < 16 && !placed; tries++) {
+      const x = COMBAT_CENTER_X + (Math.random() - 0.5) * 5600;
+      const z = COMBAT_CENTER_Z + (Math.random() - 0.5) * 5600;
+      const dx = x - COMBAT_CENTER_X;
+      const dz = z - COMBAT_CENTER_Z;
+      const radial = Math.hypot(dx, dz);
+      if (radial < 380 || radial > 3500) continue;
+      if (getCombatWaterBodyAt(x, z)) continue;
+      const y = sampleCombatTerrainHeight(x, z, BASE_GROUND_Y);
+      if (y < BASE_GROUND_Y + 20) continue;
+
+      dummy.position.set(x, y + 2, z);
+      dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+      const scale = 0.8 + Math.random() * 1.35;
+      dummy.scale.set(scale, scale * (0.9 + Math.random() * 0.7), scale);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      placed = true;
+    }
+    if (!placed) {
+      dummy.position.set(COMBAT_CENTER_X, -500, COMBAT_CENTER_Z);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    }
+  }
+
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  return mesh;
+}
+
+function createCombatCaveEntrance(spec, parentGroup, mountainMat) {
+  const group = new THREE.Group();
+  const caveMat = new THREE.MeshStandardMaterial({
+    color: 0x0b0d10,
+    emissive: 0x040608,
+    emissiveIntensity: 0.18,
+    roughness: 1.0,
+    metalness: 0.0
+  });
+  const accentMat = new THREE.MeshStandardMaterial({
+    color: 0x39453f,
+    roughness: 1.0,
+    metalness: 0.0
+  });
+
+  const faceDir = new THREE.Vector3(spec.dirX, 0, spec.dirZ).normalize();
+  const angle = Math.atan2(faceDir.x, faceDir.z);
+  const entranceY = sampleCombatTerrainHeight(spec.x, spec.z, BASE_GROUND_Y);
+
+  const shell = new THREE.Mesh(new THREE.CylinderGeometry(84, 98, 190, 12, 1, true), caveMat);
+  shell.rotation.z = Math.PI * 0.5;
+  shell.position.set(0, 68, -44);
+  shell.castShadow = false;
+  shell.receiveShadow = false;
+  group.add(shell);
+
+  const mouth = new THREE.Mesh(new THREE.SphereGeometry(76, 16, 12, 0, Math.PI), caveMat);
+  mouth.rotation.y = Math.PI * 0.5;
+  mouth.position.set(0, 64, -78);
+  group.add(mouth);
+
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(168, 8, 128), accentMat);
+  floor.position.set(0, 4, -58);
+  floor.receiveShadow = true;
+  group.add(floor);
+
+  for (const side of [-1, 1]) {
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(34, 122, 34), mountainMat);
+    pillar.position.set(side * 70, 60, -18);
+    pillar.rotation.z = side * 0.12;
+    pillar.castShadow = true;
+    pillar.receiveShadow = true;
+    group.add(pillar);
+  }
+
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(170, 32, 42), mountainMat);
+  lintel.position.set(0, 118, -10);
+  lintel.rotation.x = -0.05;
+  lintel.castShadow = true;
+  lintel.receiveShadow = true;
+  group.add(lintel);
+
+  group.position.set(spec.x, entranceY, spec.z);
+  group.rotation.y = angle;
+  parentGroup.add(group);
+  combatCaveEntrances.push(group);
+}
+
+function createCombatWaterBody(spec, parentGroup) {
+  const waterMat = new THREE.MeshStandardMaterial({
+    color: spec.color ?? 0x2d6f7d,
+    emissive: spec.emissive ?? 0x0f2734,
+    emissiveIntensity: 0.22,
+    transparent: true,
+    opacity: spec.opacity ?? 0.78,
+    roughness: 0.2,
+    metalness: 0.02
+  });
+  const mesh = new THREE.Mesh(
+    new THREE.CircleGeometry(1, 48),
+    waterMat
+  );
+  mesh.rotation.x = -Math.PI * 0.5;
+  mesh.position.set(spec.x, spec.y, spec.z);
+  mesh.scale.set(spec.rx, spec.rz, 1);
+  mesh.receiveShadow = true;
+  parentGroup.add(mesh);
+  combatWaterBodies.push(spec);
+  combatAnimatedWaters.push({
+    mesh,
+    material: waterMat,
+    baseY: spec.y,
+    bobAmp: spec.bobAmp ?? 0.7,
+    bobSpeed: spec.bobSpeed ?? 1.15,
+    phase: Math.random() * Math.PI * 2
+  });
+
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x50575d, roughness: 1.0, metalness: 0.0 });
+  for (let i = 0; i < spec.edgeRocks; i++) {
+    const ang = (i / spec.edgeRocks) * Math.PI * 2 + Math.random() * 0.24;
+    const rock = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(18 + Math.random() * 26, 0),
+      rockMat
+    );
+    const edgeX = spec.x + Math.cos(ang) * (spec.rx * (0.9 + Math.random() * 0.2));
+    const edgeZ = spec.z + Math.sin(ang) * (spec.rz * (0.9 + Math.random() * 0.2));
+    rock.position.set(edgeX, sampleCombatTerrainHeight(edgeX, edgeZ, BASE_GROUND_Y) + 10, edgeZ);
+    rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    const scale = 0.9 + Math.random() * 1.5;
+    rock.scale.setScalar(scale);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    parentGroup.add(rock);
+  }
+}
+
+function createCombatWaterfall(spec, parentGroup) {
+  const fallsMat = new THREE.MeshStandardMaterial({
+    color: 0x7cd7ff,
+    emissive: 0x1f6a91,
+    emissiveIntensity: 0.35,
+    transparent: true,
+    opacity: 0.58,
+    roughness: 0.16,
+    metalness: 0.0,
+    side: THREE.DoubleSide
+  });
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(spec.width, spec.height, 1, 12),
+    fallsMat
+  );
+  mesh.position.set(spec.x, spec.baseY + spec.height * 0.5, spec.z);
+  mesh.rotation.y = spec.rotY;
+  mesh.castShadow = false;
+  parentGroup.add(mesh);
+  combatAnimatedWaters.push({
+    mesh,
+    material: fallsMat,
+    baseY: mesh.position.y,
+    bobAmp: 1.1,
+    bobSpeed: 1.8,
+    phase: Math.random() * Math.PI * 2,
+    waterfall: true
+  });
+
+  const mistGroup = new THREE.Group();
+  mistGroup.position.set(spec.x, spec.baseY + 12, spec.z);
+  parentGroup.add(mistGroup);
+  const mistMat = new THREE.MeshStandardMaterial({
+    color: 0xd9f5ff,
+    transparent: true,
+    opacity: 0.3,
+    roughness: 1.0,
+    metalness: 0.0,
+    depthWrite: false
+  });
+  const puffs = [];
+  for (let i = 0; i < 9; i++) {
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(18 + Math.random() * 16, 8, 8), mistMat.clone());
+    puff.position.set((Math.random() - 0.5) * 90, Math.random() * 30, (Math.random() - 0.5) * 40);
+    puff.scale.setScalar(0.9 + Math.random() * 1.5);
+    mistGroup.add(puff);
+    puffs.push({
+      mesh: puff,
+      base: puff.position.clone(),
+      phase: Math.random() * Math.PI * 2,
+      rise: 7 + Math.random() * 6
+    });
+  }
+  combatWaterfallMists.push({ group: mistGroup, puffs });
+}
+
+function getCombatWaterBodyAt(x, z) {
+  for (const body of combatWaterBodies) {
+    const nx = (x - body.x) / body.rx;
+    const nz = (z - body.z) / body.rz;
+    if ((nx * nx + nz * nz) <= 1) return body;
+  }
+  return null;
+}
+
+function getCombatWaterStateAt(x, z, y = BASE_GROUND_Y) {
+  const body = getCombatWaterBodyAt(x, z);
+  if (!body) return null;
+  const depth = Math.max(0, body.y + 10 - y);
+  return {
+    body,
+    surfaceY: body.y,
+    depth
+  };
+}
+
+function sampleCombatTerrainHeight(x, z, currentY = BASE_GROUND_Y) {
+  const lx = x - COMBAT_CENTER_X;
+  const lz = z - COMBAT_CENTER_Z;
+  const radial = Math.hypot(lx, lz);
+  if (radial > 4300) return BASE_GROUND_Y;
+
+  const rimFactor = THREE.MathUtils.smoothstep(radial, 420, 2900);
+  let y = BASE_GROUND_Y
+    + rimFactor * (Math.sin(lx * 0.0014) * 20 + Math.cos(lz * 0.00115) * 16)
+    + rimFactor * Math.sin((lx + lz) * 0.00075) * 12;
+
+  for (const m of combatTerrainMountains) {
+    const dx = x - m.x;
+    const dz = z - m.z;
+    const d = Math.hypot(dx, dz);
+    if (d >= m.radius) continue;
+    const t = 1 - (d / m.radius);
+    const localHeight = Math.pow(t, m.power) * m.height;
+    y = Math.max(y, BASE_GROUND_Y + m.baseLift + localHeight);
+  }
+
+  return y;
+}
+
+function createCombatBiome() {
+  if (combatBiomeGroup) return;
+  combatBiomeGroup = new THREE.Group();
+  combatBiomeGroup.name = 'combatBiome';
+  scene.add(combatBiomeGroup);
+
+  const mountainPalette = [
+    new THREE.MeshStandardMaterial({ color: 0x455058, roughness: 1.0, metalness: 0.0 }),
+    new THREE.MeshStandardMaterial({ color: 0x56615d, roughness: 1.0, metalness: 0.0 }),
+    new THREE.MeshStandardMaterial({ color: 0x38453f, roughness: 1.0, metalness: 0.0 }),
+    new THREE.MeshStandardMaterial({ color: 0x626b73, roughness: 1.0, metalness: 0.0 })
+  ];
+
+  const mountainSpecs = [
+    { x: COMBAT_CENTER_X - 2600, z: COMBAT_CENTER_Z - 300, radius: 1700, height: 1680, power: 1.78, sides: 11, tint: 0 },
+    { x: COMBAT_CENTER_X + 2480, z: COMBAT_CENTER_Z - 120, radius: 1650, height: 1520, power: 1.8, sides: 10, tint: 1 },
+    { x: COMBAT_CENTER_X - 2100, z: COMBAT_CENTER_Z + 1820, radius: 1780, height: 1800, power: 1.74, sides: 12, tint: 2 },
+    { x: COMBAT_CENTER_X + 2080, z: COMBAT_CENTER_Z + 1920, radius: 1720, height: 1760, power: 1.76, sides: 11, tint: 0 },
+    { x: COMBAT_CENTER_X - 320, z: COMBAT_CENTER_Z - 2920, radius: 2100, height: 2080, power: 1.7, sides: 13, tint: 3 },
+    { x: COMBAT_CENTER_X - 1380, z: COMBAT_CENTER_Z - 2220, radius: 1420, height: 1220, power: 1.83, sides: 9, tint: 2 },
+    { x: COMBAT_CENTER_X + 1460, z: COMBAT_CENTER_Z - 2180, radius: 1460, height: 1260, power: 1.83, sides: 9, tint: 1 },
+    { x: COMBAT_CENTER_X - 3040, z: COMBAT_CENTER_Z + 1180, radius: 1480, height: 1420, power: 1.82, sides: 10, tint: 0 },
+    { x: COMBAT_CENTER_X + 3080, z: COMBAT_CENTER_Z + 1120, radius: 1460, height: 1450, power: 1.82, sides: 10, tint: 3 }
+  ];
+
+  combatTerrainMountains.push(...mountainSpecs.map(spec => ({ ...spec, baseLift: 0 })));
+
+  for (const spec of mountainSpecs) {
+    const mountain = new THREE.Mesh(
+      new THREE.ConeGeometry(spec.radius, spec.height, spec.sides),
+      mountainPalette[spec.tint % mountainPalette.length]
+    );
+    mountain.position.set(spec.x, BASE_GROUND_Y + spec.height * 0.5, spec.z);
+    mountain.rotation.y = Math.random() * Math.PI * 2;
+    mountain.rotation.x = (Math.random() - 0.5) * 0.06;
+    mountain.rotation.z = (Math.random() - 0.5) * 0.06;
+    mountain.castShadow = true;
+    mountain.receiveShadow = true;
+    combatBiomeGroup.add(mountain);
+
+    for (let i = 0; i < 4; i++) {
+      const ang = (i / 4) * Math.PI * 2 + Math.random() * 0.4;
+      const r = spec.radius * (0.44 + Math.random() * 0.18);
+      const h = spec.height * (0.28 + Math.random() * 0.18);
+      const spur = new THREE.Mesh(
+        new THREE.ConeGeometry(spec.radius * (0.24 + Math.random() * 0.1), h, Math.max(7, spec.sides - 2)),
+        mountainPalette[(spec.tint + i + 1) % mountainPalette.length]
+      );
+      spur.position.set(spec.x + Math.cos(ang) * r, BASE_GROUND_Y + h * 0.5, spec.z + Math.sin(ang) * r);
+      spur.rotation.y = ang + Math.PI * 0.5;
+      spur.castShadow = true;
+      spur.receiveShadow = true;
+      combatBiomeGroup.add(spur);
+    }
+  }
+
+  createCombatWaterBody({
+    x: COMBAT_CENTER_X + 260,
+    z: COMBAT_CENTER_Z + 620,
+    y: BASE_GROUND_Y + 12,
+    rx: 520,
+    rz: 340,
+    edgeRocks: 16,
+    color: 0x2a7488,
+    emissive: 0x12344b
+  }, combatBiomeGroup);
+  createCombatWaterBody({
+    x: COMBAT_CENTER_X - 880,
+    z: COMBAT_CENTER_Z + 1060,
+    y: BASE_GROUND_Y + 16,
+    rx: 700,
+    rz: 150,
+    edgeRocks: 14,
+    color: 0x2b6e7e,
+    emissive: 0x14303e,
+    opacity: 0.72,
+    bobAmp: 0.5,
+    bobSpeed: 1.5
+  }, combatBiomeGroup);
+
+  createCombatWaterfall({
+    x: COMBAT_CENTER_X - 1450,
+    z: COMBAT_CENTER_Z + 1290,
+    baseY: BASE_GROUND_Y + 26,
+    width: 165,
+    height: 420,
+    rotY: Math.PI * 0.08
+  }, combatBiomeGroup);
+  createCombatWaterfall({
+    x: COMBAT_CENTER_X + 1280,
+    z: COMBAT_CENTER_Z + 1360,
+    baseY: BASE_GROUND_Y + 18,
+    width: 132,
+    height: 360,
+    rotY: -Math.PI * 0.14
+  }, combatBiomeGroup);
+
+  const caveSpecs = [
+    { x: COMBAT_CENTER_X - 1800, z: COMBAT_CENTER_Z - 1460, dirX: 1, dirZ: 0.45 },
+    { x: COMBAT_CENTER_X + 1840, z: COMBAT_CENTER_Z - 1520, dirX: -1, dirZ: 0.38 },
+    { x: COMBAT_CENTER_X - 2380, z: COMBAT_CENTER_Z + 720, dirX: 0.82, dirZ: -0.14 },
+    { x: COMBAT_CENTER_X + 2460, z: COMBAT_CENTER_Z + 840, dirX: -0.88, dirZ: -0.2 }
+  ];
+  for (let i = 0; i < caveSpecs.length; i++) {
+    createCombatCaveEntrance(caveSpecs[i], combatBiomeGroup, mountainPalette[i % mountainPalette.length]);
+  }
+
+  const ridgeRockMat = new THREE.MeshStandardMaterial({ color: 0x525e58, roughness: 1.0, metalness: 0.0 });
+  for (let i = 0; i < 72; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const radial = 620 + Math.random() * 3000;
+    const x = COMBAT_CENTER_X + Math.cos(ang) * radial;
+    const z = COMBAT_CENTER_Z + Math.sin(ang) * radial;
+    if (getCombatWaterBodyAt(x, z)) continue;
+    const rock = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(22 + Math.random() * 44, 0),
+      ridgeRockMat
+    );
+    rock.position.set(x, sampleCombatTerrainHeight(x, z, BASE_GROUND_Y) + 14, z);
+    rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    rock.scale.setScalar(0.85 + Math.random() * 1.7);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    combatBiomeGroup.add(rock);
+  }
+
+  combatBiomeGroup.add(createCombatFernPatch(1750));
+}
+
+function stepCombatBiomeEffects(delta, elapsedTime) {
+  if (!combatBiomeGroup) return;
+
+  for (const water of combatAnimatedWaters) {
+    if (!water?.mesh) continue;
+    if (water.waterfall) {
+      water.mesh.position.y = water.baseY + Math.sin(elapsedTime * water.bobSpeed + water.phase) * 1.2;
+      water.mesh.material.opacity = 0.48 + Math.sin(elapsedTime * 2.2 + water.phase) * 0.08;
+      continue;
+    }
+    water.mesh.position.y = water.baseY + Math.sin(elapsedTime * water.bobSpeed + water.phase) * water.bobAmp;
+    water.material.emissiveIntensity = 0.18 + (Math.sin(elapsedTime * 1.9 + water.phase) * 0.5 + 0.5) * 0.12;
+  }
+
+  for (const mist of combatWaterfallMists) {
+    for (const puff of mist.puffs) {
+      puff.mesh.position.x = puff.base.x + Math.sin(elapsedTime * 0.9 + puff.phase) * 10;
+      puff.mesh.position.y = puff.base.y + (Math.sin(elapsedTime * puff.rise + puff.phase) * 0.5 + 0.5) * 26;
+      puff.mesh.position.z = puff.base.z + Math.cos(elapsedTime * 0.75 + puff.phase) * 8;
+      puff.mesh.material.opacity = 0.14 + (Math.sin(elapsedTime * 1.8 + puff.phase) * 0.5 + 0.5) * 0.18;
+    }
+  }
+}
 
 let merchant = null;
 function createMerchantShopStand() {
@@ -2636,6 +3087,9 @@ addTower(900,  -520, { height: 420, radius: 92, steps: 32 });
 function sampleGroundHeight(x, z, currentY = BASE_GROUND_Y) {
   const candidates = [BASE_GROUND_Y];
 
+  const combatY = sampleCombatTerrainHeight(x, z, currentY);
+  if (combatY > BASE_GROUND_Y) candidates.push(combatY);
+
   // Check towers' steps and top deck.
   for (const t of towers) {
     for (const s of t.steps) {
@@ -2657,6 +3111,8 @@ function sampleGroundHeight(x, z, currentY = BASE_GROUND_Y) {
   }
   return y;
 }
+
+createCombatBiome();
 
 // =====================
 // INPUT
@@ -2802,7 +3258,7 @@ let recoilVisual = 0;
 let recoilPitchOffset = 0;
 let recoilYawOffset = 0;
 
-const COMBAT_SPAWN_POINT = new THREE.Vector3(-8600, BASE_GROUND_Y, -8200);
+const COMBAT_SPAWN_POINT = new THREE.Vector3(COMBAT_CENTER_X, BASE_GROUND_Y, COMBAT_CENTER_Z);
 const WORLD_ZONE = {
   START: 'START',
   COMBAT: 'COMBAT'
@@ -4668,7 +5124,12 @@ function stepMovement(delta) {
   const sprintTarget = (keys['shift'] && dirLen > 0) ? 1 : 0;
   const sprintAlpha = 1 - Math.exp(-SPRINT_BLEND_RATE * delta);
   sprintBlend += (sprintTarget - sprintBlend) * sprintAlpha;
-  const speed = THREE.MathUtils.lerp(WALK_SPEED, SPRINT_SPEED, sprintBlend);
+  let speed = THREE.MathUtils.lerp(WALK_SPEED, SPRINT_SPEED, sprintBlend);
+  const waterState = getCombatWaterStateAt(player.position.x, player.position.z, player.position.y);
+  if (waterState) {
+    const waterSlow = THREE.MathUtils.clamp(waterState.depth / 34, 0.2, 0.52);
+    speed *= waterSlow;
+  }
 
   if (dirLen > 0) {
     const accel = groundedAtStart ? GROUND_ACCEL : AIR_ACCEL;
@@ -4721,6 +5182,11 @@ function stepMovement(delta) {
 
   // gravity
   vel.y -= GRAVITY * delta;
+  if (waterState && player.position.y <= waterState.surfaceY + 8) {
+    const submerge = THREE.MathUtils.clamp((waterState.surfaceY + 8 - player.position.y) / 18, 0, 1);
+    vel.y += 78 * submerge * delta;
+    vel.y = Math.max(vel.y, -12);
+  }
   player.position.y += vel.y * delta;
 
   // dynamic ground (stairs/platforms)
@@ -4740,6 +5206,7 @@ function stepMovement(delta) {
 function animate() {
   requestAnimationFrame(animate);
   const delta = Math.min(clock.getDelta(), 0.1);
+  const elapsedTime = clock.elapsedTime;
 
   const invOpen = document.getElementById('inventoryScreen').style.display === 'flex';
   const shopOpen = isShopOpen();
@@ -4771,6 +5238,7 @@ function animate() {
     stepImpactBursts(delta);
     stepShells(delta);
     stepFloatingTexts(delta);
+    stepCombatBiomeEffects(delta, elapsedTime);
     updateDayNight(delta);
     updateMerchantHint();
     updateCameraView(delta);
