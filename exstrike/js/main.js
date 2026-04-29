@@ -1150,7 +1150,8 @@ function createCombatWaterBody(spec, parentGroup) {
     transparent: true,
     opacity: spec.opacity ?? 0.78,
     roughness: 0.2,
-    metalness: 0.02
+    metalness: 0.02,
+    side: THREE.DoubleSide
   });
   const mesh = new THREE.Mesh(
     new THREE.CircleGeometry(1, 48),
@@ -1171,7 +1172,8 @@ function createCombatWaterBody(spec, parentGroup) {
     opacity: spec.foamOpacity ?? 0.2,
     roughness: 0.35,
     metalness: 0.0,
-    depthWrite: false
+    depthWrite: false,
+    side: THREE.DoubleSide
   });
   const foamMesh = new THREE.Mesh(new THREE.CircleGeometry(1, 48), foamMat);
   foamMesh.rotation.x = -Math.PI * 0.5;
@@ -1372,10 +1374,10 @@ function createCombatBiome() {
   scene.add(combatBiomeGroup);
 
   const mountainPalette = [
-    new THREE.MeshStandardMaterial({ color: 0x455058, roughness: 1.0, metalness: 0.0 }),
-    new THREE.MeshStandardMaterial({ color: 0x56615d, roughness: 1.0, metalness: 0.0 }),
-    new THREE.MeshStandardMaterial({ color: 0x38453f, roughness: 1.0, metalness: 0.0 }),
-    new THREE.MeshStandardMaterial({ color: 0x626b73, roughness: 1.0, metalness: 0.0 })
+    new THREE.MeshStandardMaterial({ color: 0x455058, roughness: 1.0, metalness: 0.0, side: THREE.DoubleSide }),
+    new THREE.MeshStandardMaterial({ color: 0x56615d, roughness: 1.0, metalness: 0.0, side: THREE.DoubleSide }),
+    new THREE.MeshStandardMaterial({ color: 0x38453f, roughness: 1.0, metalness: 0.0, side: THREE.DoubleSide }),
+    new THREE.MeshStandardMaterial({ color: 0x626b73, roughness: 1.0, metalness: 0.0, side: THREE.DoubleSide })
   ];
 
   const mountainSpecs = [
@@ -1424,14 +1426,14 @@ function createCombatBiome() {
   createCombatWaterBody({
     x: COMBAT_CENTER_X + 260,
     z: COMBAT_CENTER_Z + 620,
-    y: BASE_GROUND_Y + 12,
+    y: BASE_GROUND_Y - 10,
     rx: 520,
     rz: 340,
     edgeRocks: 16,
     bedRocks: 18,
-    bedDepth: 34,
-    bankLift: 14,
-    bankScale: 1.28,
+    bedDepth: 28,
+    bankLift: 20,
+    bankScale: 1.36,
     flowDirX: 0.52,
     flowDirZ: -0.18,
     flowSpeed: 0.08,
@@ -1441,14 +1443,14 @@ function createCombatBiome() {
   createCombatWaterBody({
     x: COMBAT_CENTER_X - 880,
     z: COMBAT_CENTER_Z + 1060,
-    y: BASE_GROUND_Y + 8,
+    y: BASE_GROUND_Y - 18,
     rx: 1180,
     rz: 180,
     edgeRocks: 14,
     bedRocks: 24,
-    bedDepth: 42,
-    bankLift: 18,
-    bankScale: 1.34,
+    bedDepth: 34,
+    bankLift: 24,
+    bankScale: 1.42,
     color: 0x2b6e7e,
     emissive: 0x14303e,
     opacity: 0.72,
@@ -1468,7 +1470,7 @@ function createCombatBiome() {
   createCombatWaterfall({
     x: COMBAT_CENTER_X - 1450,
     z: COMBAT_CENTER_Z + 1290,
-    baseY: BASE_GROUND_Y + 6,
+    baseY: BASE_GROUND_Y - 14,
     width: 165,
     height: 420,
     rotY: Math.PI * 0.08,
@@ -1477,7 +1479,7 @@ function createCombatBiome() {
   createCombatWaterfall({
     x: COMBAT_CENTER_X + 1280,
     z: COMBAT_CENTER_Z + 1360,
-    baseY: BASE_GROUND_Y + 4,
+    baseY: BASE_GROUND_Y - 16,
     width: 132,
     height: 360,
     rotY: -Math.PI * 0.14,
